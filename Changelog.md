@@ -5,6 +5,25 @@ and the release tags `v<version>`.
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-10-12
+
+- Placeholder `$HOSTNAME$` in the patterns of allowed, additionally allowed
+  and unwanted members: replaced by the Windows computer name, which the
+  agent plugin now reports in a `computer` line.
+- Rule help: format of the patterns, examples and the note that the backslash
+  has to be written twice now appear at the lists themselves.
+- The service details no longer show how the group was queried
+  ("queried with Get-LocalGroupMember").
+
+## [2.5.0] - 2026-10-12
+
+- Renamed the package and everything in it from `local_administrators` to
+  `local_group_members`: plugin family, agent section, check plugin, both
+  rulesets, bakery plugin, agent plugin `local_group_members.ps1` and its
+  configuration file `local_group_members.cfg`. Not compatible with 1.0.0:
+  remove the old package, recreate the rules, bake and deploy the agents and
+  rediscover the services.
+
 ## [1.0.0] - 2026-10-12
 
 - Agent plugin `local_administrators.ps1`: members of local groups via

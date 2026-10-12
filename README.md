@@ -9,12 +9,14 @@ Requires Checkmk 2.5 (the bakery plugin uses the bakery API v2,
 `cmk.bakery.v2_unstable`, which may still change until Checkmk 3.0).
 
 > **Status:** the check, the rules and the bakery plugin are tested in a
-> Checkmk 2.5.0p15 site with canned agent output. The PowerShell agent plugin
-> has not been verified on real Windows hosts yet.
+> Checkmk 2.5.0p15 site. The PowerShell agent plugin has run on one German
+> Windows server (domain member, deployed by the bakery with caching). Not
+> verified yet: English Windows, the ADSI fallback (groups with orphaned
+> SIDs), Entra ID members, domain controllers and custom group names.
 
 ## How it works
 
-The agent plugin `local_administrators.ps1` reads the members with
+The agent plugin `local_group_members.ps1` reads the members with
 `Get-LocalGroupMember`. If the cmdlet is missing or fails (it does so when a
 group contains orphaned SIDs and, on some builds, Entra ID members), the
 plugin falls back to ADSI.
@@ -36,8 +38,8 @@ Download the MKP from the
 user:
 
 ```bash
-mkp add local_administrators-<version>.mkp
-mkp enable local_administrators <version>
+mkp add local_group_members-<version>.mkp
+mkp enable local_group_members <version>
 ```
 
 ## Deploying the agent plugin
@@ -53,10 +55,10 @@ Windows local group members*.
 | Run asynchronously and cache the result | Run the plugin in the background and reuse its output for the given time |
 
 **Manually:** copy
-`plugins/local_administrators/agents/local_administrators.ps1` to
+`plugins/local_group_members/agents/local_group_members.ps1` to
 `C:\ProgramData\checkmk\agent\plugins\`. Without a configuration file the
 plugin reports the Administrators group. To monitor other groups, create
-`C:\ProgramData\checkmk\agent\config\local_administrators.cfg` with one line
+`C:\ProgramData\checkmk\agent\config\local_group_members.cfg` with one line
 per group:
 
 ```
@@ -98,6 +100,17 @@ SRV01\\.*
 S-1-5-21-.*-500
 ```
 
+**Placeholder for the host name:** `$HOSTNAME$` in a pattern is replaced by
+the Windows computer name of the host (as reported by the agent plugin, not
+the host name in Checkmk). One rule then covers accounts that carry the name
+of their server:
+
+```
+CONTOSO\\srvadmins_$HOSTNAME$     on SRV01: the domain group srvadmins_SRV01
+$HOSTNAME$\\adm_$HOSTNAME$        on SRV01: the local user adm_SRV01
+$HOSTNAME$\\.*                    all local accounts of the host
+```
+
 **Overriding settings for specific hosts:** the rule can be restricted to
 hosts, folders, labels and groups like any Checkmk rule. A more specific rule
 above a general one overrides only the settings it contains. A list is
@@ -115,7 +128,8 @@ type, source, SID), so they can be searched across hosts.
 ## Section format
 
 ```
-<<<local_administrators:sep(124)>>>
+<<<local_group_members:sep(124)>>>
+computer|<computer name>
 group|<key>|<group SID>|<group name>|<status>|<method>|<message>
 member|<key>|<member SID>|<member name>|<object class>|<principal source>
 ```
@@ -133,20 +147,20 @@ This repository is based on the
 ```bash
 .devcontainer/ci.sh                                   # lint, tests, plugin validation
 .devcontainer/test-host.sh winsrv temp/winsrv.txt     # host with canned agent output
-cmk -vI --detect-plugins=local_administrators winsrv
-cmk -v --detect-plugins=local_administrators winsrv
+cmk -vI --detect-plugins=local_group_members winsrv
+cmk -v --detect-plugins=local_group_members winsrv
 .devcontainer/build.sh                                # build the MKP from ./package
 ```
 
 | Component | Location |
 |---|---|
-| Agent plugin | `plugins/local_administrators/agents/local_administrators.ps1` |
-| Section, check and inventory plugin | `plugins/local_administrators/agent_based/local_administrators.py` |
-| Check parameters | `plugins/local_administrators/rulesets/local_administrators.py` |
-| Bakery rule | `plugins/local_administrators/rulesets/agent_config.py` |
-| Bakery plugin | `plugins/local_administrators/bakery/local_administrators.py` |
-| Built-in group table | `plugins/local_administrators/lib.py` |
-| Tests | `tests/test_local_administrators.py` |
+| Agent plugin | `plugins/local_group_members/agents/local_group_members.ps1` |
+| Section, check and inventory plugin | `plugins/local_group_members/agent_based/local_group_members.py` |
+| Check parameters | `plugins/local_group_members/rulesets/local_group_members.py` |
+| Bakery rule | `plugins/local_group_members/rulesets/agent_config.py` |
+| Bakery plugin | `plugins/local_group_members/bakery/local_group_members.py` |
+| Built-in group table | `plugins/local_group_members/lib.py` |
+| Tests | `tests/test_local_group_members.py` |
 
 Releases are documented in `Changelog.md`. To release: bump `version` in
 `package`, commit, then `git tag v<version> && git push origin v<version>`;

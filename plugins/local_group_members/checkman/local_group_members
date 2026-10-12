@@ -6,7 +6,7 @@ distribution: Andre
 description:
  This check monitors the members of local groups on Windows hosts, by default
  the local Administrators group. It needs the agent plugin
- {local_administrators.ps1}, which can be deployed and configured with the
+ {local_group_members.ps1}, which can be deployed and configured with the
  agent bakery rule {Windows local group members}.
 
  The plugin reads the members with {Get-LocalGroupMember} and falls back to
@@ -20,6 +20,9 @@ description:
  are members, if a member is not on an allow list, or if members were added
  or removed since the service discovery. Members on the allow list are always
  {OK}.
+
+ In the patterns of the rule the placeholder {$HOSTNAME$} stands for the
+ Windows computer name of the host.
 
  If the group no longer exists or its members cannot be read, the check is
  {UNKNOWN}; this state is configurable.

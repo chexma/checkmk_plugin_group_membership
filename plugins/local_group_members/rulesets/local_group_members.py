@@ -15,11 +15,32 @@ from cmk.rulesets.v1.form_specs import (
 )
 from cmk.rulesets.v1.rule_specs import CheckParameters, HostAndItemCondition, Topic
 
+# Appended to the help of every member list: the format is the same everywhere.
+_PATTERN_FORMAT = (
+    "<br><br><b>Format:</b> each entry is a regular expression that has to match the "
+    "complete name of a member as shown in the service details, i.e. "
+    "<tt>DOMAIN\\name</tt> or <tt>COMPUTER\\name</tt>, or the SID of the member. An "
+    "entry can be a single user or a group; both are written the same way. Upper and "
+    "lower case are not distinguished.<br><br>"
+    "<b>The backslash between domain and name has to be written twice (\\\\)</b>, "
+    "because a single backslash has a special meaning in regular expressions.<br><br>"
+    "Examples:<br>"
+    "<tt>CONTOSO\\\\jdoe</tt> - the domain user jdoe<br>"
+    "<tt>CONTOSO\\\\Domain Admins</tt> - the domain group Domain Admins<br>"
+    "<tt>SRV01\\\\Administrator</tt> - a local user of the computer SRV01<br>"
+    "<tt>.*\\\\Administrator</tt> - the user Administrator of any computer or domain<br>"
+    "<tt>CONTOSO\\\\svc_.*</tt> - all accounts of the domain whose name starts with svc_<br>"
+    "<tt>S-1-5-21-.*-500</tt> - the built-in Administrator account, by its SID<br><br>"
+    "<b>Placeholder:</b> <tt>$HOSTNAME$</tt> is replaced by the Windows computer name "
+    "of the host, so one rule fits accounts that carry the name of their server:<br>"
+    "<tt>CONTOSO\\\\srvadmins_$HOSTNAME$</tt> - on SRV01 the domain group srvadmins_SRV01<br>"
+    "<tt>$HOSTNAME$\\\\adm_$HOSTNAME$</tt> - on SRV01 the local user adm_SRV01<br>"
+    "<tt>$HOSTNAME$\\\\.*</tt> - all local accounts of the host"
+)
+
 _PATTERN_HELP = Help(
-    "Regular expression that has to match the complete member name as shown in the "
-    "service details (e.g. <tt>CONTOSO\\\\Domain Admins</tt>, <tt>SRV01\\\\.*</tt>) or the "
-    "SID of the member. Upper and lower case are not distinguished. Note that the "
-    "backslash between domain and name has to be written twice."
+    "Complete name of a user or group, e.g. <tt>CONTOSO\\\\Domain Admins</tt>, or a SID. "
+    "Write the backslash twice."
 )
 
 
@@ -56,7 +77,7 @@ def _parameter_form() -> Dictionary:
                     title=Title("Unwanted members"),
                     help_text=Help(
                         "Users or groups that must not be members of the group. "
-                        "The first matching entry determines the state."
+                        "The first matching entry determines the state." + _PATTERN_FORMAT
                     ),
                     add_element_label=Label("Add unwanted member"),
                     element_template=Dictionary(
@@ -84,11 +105,13 @@ def _parameter_form() -> Dictionary:
                 parameter_form=List(
                     title=Title("Allowed members (allow list)"),
                     help_text=Help(
-                        "Members matching one of these patterns are always OK. They are "
-                        "exempt from all other settings of this rule."
+                        "Users and groups that are allowed as members. Members matching "
+                        "one of the entries are always OK. They are exempt from all other "
+                        "settings of this rule." + _PATTERN_FORMAT
                     ),
                     add_element_label=Label("Add allowed member"),
                     element_template=RegularExpression(
+                        label=Label("User or group"),
                         help_text=_PATTERN_HELP,
                         predefined_help_text=MatchingScope.FULL,
                     ),
@@ -98,13 +121,14 @@ def _parameter_form() -> Dictionary:
                 parameter_form=List(
                     title=Title("Additionally allowed members"),
                     help_text=Help(
-                        "These members are allowed in addition to the allow list. Use this "
-                        "in a rule for specific hosts or groups: a more specific rule "
-                        "replaces the allow list of a general rule, whereas this list is "
-                        "added to it."
+                        "Users and groups that are allowed in addition to the allow list. "
+                        "Use this in a rule for specific hosts or groups: a more specific "
+                        "rule replaces the allow list of a general rule, whereas this list "
+                        "is added to it." + _PATTERN_FORMAT
                     ),
                     add_element_label=Label("Add allowed member"),
                     element_template=RegularExpression(
+                        label=Label("User or group"),
                         help_text=_PATTERN_HELP,
                         predefined_help_text=MatchingScope.FULL,
                     ),
@@ -158,8 +182,8 @@ def _parameter_form() -> Dictionary:
     )
 
 
-rule_spec_local_administrators = CheckParameters(
-    name="local_administrators",
+rule_spec_local_group_members = CheckParameters(
+    name="local_group_members",
     title=Title("Windows local group members"),
     topic=Topic.OPERATING_SYSTEM,
     parameter_form=_parameter_form,

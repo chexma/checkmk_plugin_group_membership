@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent bakery rule for the agent plugin local_administrators.ps1."""
+"""Agent bakery rule for the agent plugin local_group_members.ps1."""
 
 from cmk.rulesets.v1 import Help, Label, Title
 from cmk.rulesets.v1.form_specs import (
@@ -18,7 +18,7 @@ from cmk.rulesets.v1.form_specs import (
     validators,
 )
 from cmk.rulesets.v1.rule_specs import AgentConfig, Topic
-from cmk_addons.plugins.local_administrators.lib import DEFAULT_GROUPS, WELL_KNOWN_GROUPS
+from cmk_addons.plugins.local_group_members.lib import DEFAULT_GROUPS, WELL_KNOWN_GROUPS
 
 
 def _deployment_form() -> Dictionary:
@@ -72,7 +72,7 @@ def _deployment_form() -> Dictionary:
 def _parameter_form() -> Dictionary:
     return Dictionary(
         help_text=Help(
-            "Deploys the agent plugin <tt>local_administrators.ps1</tt>, which reports the "
+            "Deploys the agent plugin <tt>local_group_members.ps1</tt>, which reports the "
             "members of local groups on Windows hosts."
         ),
         elements={
@@ -99,8 +99,8 @@ def _parameter_form() -> Dictionary:
     )
 
 
-rule_spec_local_administrators_bakery = AgentConfig(
-    name="local_administrators",
+rule_spec_local_group_members_bakery = AgentConfig(
+    name="local_group_members",
     title=Title("Windows local group members"),
     topic=Topic.OPERATING_SYSTEM,
     parameter_form=_parameter_form,

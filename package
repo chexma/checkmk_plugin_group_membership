@@ -2,7 +2,7 @@
  'description': 'Monitors the members of local groups on Windows hosts, by '
                 'default the local Administrators group.\n'
                 '\n'
-                'The agent plugin local_administrators.ps1 reads the members '
+                'The agent plugin local_group_members.ps1 reads the members '
                 'with Get-LocalGroupMember (ADSI fallback) and works on '
                 'Windows installations of any language. One service "Local '
                 'group <name>" per group; the rule "Windows local group '
@@ -14,16 +14,16 @@
                 'Includes an agent bakery rule and plugin (bakery API v2, '
                 'Checkmk 2.5) to deploy the plugin and select the groups.\n',
  'download_url': 'https://github.com/chexma/checkmk_plugin_local_administrators',
- 'files': {'cmk_addons_plugins': ['local_administrators/agent_based/local_administrators.py',
-                                  'local_administrators/agents/local_administrators.ps1',
-                                  'local_administrators/bakery/local_administrators.py',
-                                  'local_administrators/checkman/local_administrators',
-                                  'local_administrators/lib.py',
-                                  'local_administrators/rulesets/agent_config.py',
-                                  'local_administrators/rulesets/local_administrators.py']},
- 'name': 'local_administrators',
+ 'files': {'cmk_addons_plugins': ['local_group_members/agent_based/local_group_members.py',
+                                  'local_group_members/agents/local_group_members.ps1',
+                                  'local_group_members/bakery/local_group_members.py',
+                                  'local_group_members/checkman/local_group_members',
+                                  'local_group_members/lib.py',
+                                  'local_group_members/rulesets/agent_config.py',
+                                  'local_group_members/rulesets/local_group_members.py']},
+ 'name': 'local_group_members',
  'title': 'Windows local group members',
- 'version': '1.0.0',
+ 'version': '2.5.1',
  'version.min_required': '2.5.0',
  'version.packaged': 'cmk-mkp-tool 3.0.0',
  'version.usable_until': None}

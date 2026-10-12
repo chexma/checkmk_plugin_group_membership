@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Members of local groups on Windows hosts (agent plugin local_administrators.ps1).
+"""Members of local groups on Windows hosts (agent plugin local_group_members.ps1).
 
 Section format, separated by pipes (a character Windows forbids in account names):
 
-    <<<local_administrators:sep(124)>>>
+    <<<local_group_members:sep(124)>>>
+    computer|<computer name>
     group|<key>|<group SID>|<group name>|<status>|<method>|<message>
     member|<key>|<member SID>|<member name>|<object class>|<principal source>
 
 <key> ties the members to their group. <status> is "ok", "missing" (the group
-does not exist) or "error" (the members could not be queried).
+does not exist) or "error" (the members could not be queried). The computer
+name is what rule patterns get for the placeholder $HOSTNAME$; without that line
+it is taken from the name of a local member.
 """
 
 import re
@@ -29,7 +32,7 @@ from cmk.agent_based.v2 import (
     StringTable,
     TableRow,
 )
-from cmk_addons.plugins.local_administrators.lib import GROUP_NAME_BY_SID
+from cmk_addons.plugins.local_group_members.lib import GROUP_NAME_BY_SID
 
 # Get-LocalGroupMember localizes the object class.
 _OBJECT_CLASSES = {
@@ -53,11 +56,7 @@ class Member:
 
     @property
     def is_builtin_administrator(self) -> bool:
-        return (
-            self.source == "Local"
-            and self.sid.startswith("S-1-5-21-")
-            and self.sid.endswith("-500")
-        )
+        return self.source == "Local" and self.sid.endswith("-500")
 
 
 @dataclass
@@ -70,21 +69,30 @@ class Group:
     members: list[Member] = field(default_factory=list)
 
 
-Section = Mapping[str, Group]
+@dataclass(frozen=True)
+class Section:
+    computer: str
+    groups: Mapping[str, Group]
+
+
+HOSTNAME_PLACEHOLDER = "$HOSTNAME$"
 
 
 def _item_name(sid: str, name: str) -> str:
     return GROUP_NAME_BY_SID.get(sid.upper()) or name or sid
 
 
-def parse_local_administrators(string_table: StringTable) -> Section:
+def parse_local_group_members(string_table: StringTable) -> Section:
     groups: dict[str, Group] = {}
+    computer = ""
     for line in string_table:
         if len(line) < 2:
             continue
         kind, key, *rest = (word.strip() for word in line)
         rest += [""] * (5 - len(rest))
-        if kind == "group":
+        if kind == "computer":
+            computer = key
+        elif kind == "group":
             sid, name, status, method, message = rest[:5]
             groups[key] = Group(sid=sid, name=name, status=status, method=method, message=message)
         elif kind == "member" and key in groups:
@@ -97,17 +105,29 @@ def parse_local_administrators(string_table: StringTable) -> Section:
                     source=source or "Unknown",
                 )
             )
-    return {_item_name(group.sid, group.name): group for group in groups.values()}
+    return Section(
+        computer=computer or _computer_from_members(groups.values()),
+        groups={_item_name(group.sid, group.name): group for group in groups.values()},
+    )
 
 
-agent_section_local_administrators = AgentSection(
-    name="local_administrators",
-    parse_function=parse_local_administrators,
+def _computer_from_members(groups: Iterable[Group]) -> str:
+    # Local accounts are named <computer>\<account>.
+    for group in groups:
+        for member in group.members:
+            if member.source == "Local" and "\\" in member.name:
+                return member.name.split("\\", 1)[0]
+    return ""
+
+
+agent_section_local_group_members = AgentSection(
+    name="local_group_members",
+    parse_function=parse_local_group_members,
 )
 
 
-def discover_local_administrators(section: Section) -> DiscoveryResult:
-    for item, group in section.items():
+def discover_local_group_members(section: Section) -> DiscoveryResult:
+    for item, group in section.groups.items():
         # A configured group that does not exist on this host gets no service.
         if group.status == "missing":
             continue
@@ -135,6 +155,25 @@ def _allowed_patterns(params: Mapping[str, Any]) -> Sequence[str]:
     # "allowed_additional" lets a host specific rule extend the general allow list:
     # rules are merged per key, so a second "allowed" would replace the first one.
     return [*params.get("allowed", []), *params.get("allowed_additional", [])]
+
+
+def _expand_placeholders(params: Mapping[str, Any], computer: str) -> Mapping[str, Any]:
+    """Replace $HOSTNAME$ in all patterns by the (regex escaped) computer name."""
+    if not computer:
+        return params
+
+    def expand(pattern: str) -> str:
+        return pattern.replace(HOSTNAME_PLACEHOLDER, re.escape(computer))
+
+    expanded = dict(params)
+    for key in ("allowed", "allowed_additional"):
+        if key in params:
+            expanded[key] = [expand(pattern) for pattern in params[key]]
+    if "forbidden" in params:
+        expanded["forbidden"] = [
+            {**rule, "pattern": expand(rule["pattern"])} for rule in params["forbidden"]
+        ]
+    return expanded
 
 
 def _invalid_patterns(params: Mapping[str, Any]) -> Sequence[str]:
@@ -191,10 +230,10 @@ def _describe(member: Member) -> str:
     return f"{member.name} ({member.object_class}, {member.source})"
 
 
-def check_local_administrators(
+def check_local_group_members(
     item: str, params: Mapping[str, Any], section: Section
 ) -> CheckResult:
-    if (group := section.get(item)) is None:
+    if (group := section.groups.get(item)) is None:
         return
 
     if group.status != "ok":
@@ -216,9 +255,10 @@ def check_local_administrators(
     )
     yield Result(
         state=State.OK,
-        notice=f"Group: {group.name} ({group.sid}), queried with {group.method or 'unknown'}",
+        notice=f"Group: {group.name} ({group.sid})",
     )
 
+    params = _expand_placeholders(params, section.computer)
     if invalid := _invalid_patterns(params):
         yield Result(
             state=State.UNKNOWN,
@@ -242,18 +282,18 @@ def check_local_administrators(
                 )
 
 
-check_plugin_local_administrators = CheckPlugin(
-    name="local_administrators",
+check_plugin_local_group_members = CheckPlugin(
+    name="local_group_members",
     service_name="Local group %s",
-    discovery_function=discover_local_administrators,
-    check_function=check_local_administrators,
+    discovery_function=discover_local_group_members,
+    check_function=check_local_group_members,
     check_default_parameters={"query_error_state": State.UNKNOWN.value},
-    check_ruleset_name="local_administrators",
+    check_ruleset_name="local_group_members",
 )
 
 
-def inventory_local_administrators(section: Section) -> InventoryResult:
-    for item, group in section.items():
+def inventory_local_group_members(section: Section) -> InventoryResult:
+    for item, group in section.groups.items():
         for member in group.members:
             yield TableRow(
                 path=["software", "os", "local_group_members"],
@@ -267,7 +307,7 @@ def inventory_local_administrators(section: Section) -> InventoryResult:
             )
 
 
-inventory_plugin_local_administrators = InventoryPlugin(
-    name="local_administrators",
-    inventory_function=inventory_local_administrators,
+inventory_plugin_local_group_members = InventoryPlugin(
+    name="local_group_members",
+    inventory_function=inventory_local_group_members,
 )

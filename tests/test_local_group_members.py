@@ -4,15 +4,15 @@ from pathlib import Path
 import pytest
 from cmk.agent_based.v2 import Result, Service, State, TableRow
 from cmk.bakery.v2_unstable import OS, Plugin, PluginConfig
-from cmk_addons.plugins.local_administrators.agent_based.local_administrators import (
-    check_local_administrators,
-    discover_local_administrators,
-    inventory_local_administrators,
-    parse_local_administrators,
+from cmk_addons.plugins.local_group_members.agent_based.local_group_members import (
+    check_local_group_members,
+    discover_local_group_members,
+    inventory_local_group_members,
+    parse_local_group_members,
 )
-from cmk_addons.plugins.local_administrators.bakery.local_administrators import (
+from cmk_addons.plugins.local_group_members.bakery.local_group_members import (
     Config,
-    get_local_administrators_files,
+    get_local_group_members_files,
 )
 
 MACHINE = "S-1-5-21-1111111111-2222222222-3333333333"
@@ -35,11 +35,11 @@ DEFAULT_PARAMS = {"query_error_state": 3}
 
 @pytest.fixture(name="section")
 def _section():
-    return parse_local_administrators([line.split("|") for line in AGENT_OUTPUT.splitlines()])
+    return parse_local_group_members([line.split("|") for line in AGENT_OUTPUT.splitlines()])
 
 
 def _check(section, params, item="Administrators"):
-    return list(check_local_administrators(item, {**DEFAULT_PARAMS, **params}, section))
+    return list(check_local_group_members(item, {**DEFAULT_PARAMS, **params}, section))
 
 
 def _state_of(results, member):
@@ -52,17 +52,17 @@ def _worst(results):
 
 
 def test_parse_uses_english_names_for_builtin_groups(section):
-    assert set(section) == {
+    assert set(section.groups) == {
         "Administrators",
         "Remote Desktop Users",
         "Hyper-V Administrators",
         "App Admins",
     }
-    assert section["Administrators"].name == "Administratoren"
+    assert section.groups["Administrators"].name == "Administratoren"
 
 
 def test_parse_normalizes_german_object_classes(section):
-    assert [m.object_class for m in section["Administrators"].members] == [
+    assert [m.object_class for m in section.groups["Administrators"].members] == [
         "User",
         "User",
         "Group",
@@ -71,7 +71,7 @@ def test_parse_normalizes_german_object_classes(section):
 
 
 def test_discovery_skips_missing_groups_and_stores_members(section):
-    services = list(discover_local_administrators(section))
+    services = list(discover_local_group_members(section))
     assert [s.item for s in services] == ["Administrators", "Remote Desktop Users", "App Admins"]
     assert services[1] == Service(
         item="Remote Desktop Users",
@@ -232,7 +232,7 @@ def test_invalid_regex_is_reported(section):
 
 
 def test_inventory(section):
-    rows = list(inventory_local_administrators(section))
+    rows = list(inventory_local_group_members(section))
     assert len(rows) == 5
     assert rows[0] == TableRow(
         path=["software", "os", "local_group_members"],
@@ -259,12 +259,12 @@ def test_bakery_deploys_plugin_and_config():
             )
         }
     )
-    assert list(get_local_administrators_files(conf)) == [
-        Plugin(base_os=OS.WINDOWS, source=Path("local_administrators.ps1"), interval=3600),
+    assert list(get_local_group_members_files(conf)) == [
+        Plugin(base_os=OS.WINDOWS, source=Path("local_group_members.ps1"), interval=3600),
         PluginConfig(
             base_os=OS.WINDOWS,
             lines=["group=S-1-5-32-544", "group=S-1-5-32-555", "group=App Admins"],
-            target=Path("local_administrators.cfg"),
+            target=Path("local_group_members.cfg"),
             include_header=True,
         ),
     ]
@@ -272,4 +272,92 @@ def test_bakery_deploys_plugin_and_config():
 
 def test_bakery_do_not_deploy():
     conf = Config.model_validate({"deployment": ("do_not_deploy", None)})
-    assert list(get_local_administrators_files(conf)) == []
+    assert list(get_local_group_members_files(conf)) == []
+
+
+# Modelled on the output of plugin version 1.0.0 on a German Windows server
+# (domain member); all names and SIDs are fictional. No "computer" line yet.
+REAL_OUTPUT_GERMAN = """\
+group|1|S-1-5-32-544|Administratoren|ok|Get-LocalGroupMember|
+member|1|S-1-5-21-2000000001-2000000002-2000000003-512|FABRIKAM\\Domänen-Admins|Gruppe|ActiveDirectory
+member|1|S-1-5-21-3000000001-3000000002-3000000003-6871|CONTOSO\\srvadmins_SRV-APP01|Gruppe|ActiveDirectory
+member|1|S-1-5-21-3000000001-3000000002-3000000003-512|CONTOSO\\Domänen-Admins|Gruppe|ActiveDirectory
+member|1|S-1-5-21-3000000001-3000000002-3000000003-3189|CONTOSO\\svc_backup|Benutzer|ActiveDirectory
+member|1|S-1-5-21-4000000001-4000000002-4000000003-500|SRV-APP01\\Administrator|Benutzer|Local
+"""
+
+
+def _parse(output):
+    return parse_local_group_members([line.split("|") for line in output.splitlines()])
+
+
+@pytest.fixture(name="real_section")
+def _real_section():
+    return _parse(REAL_OUTPUT_GERMAN)
+
+
+def test_real_output_german(real_section):
+    assert list(real_section.groups) == ["Administrators"]
+    results = _check(real_section, {})
+    assert _worst(results) is State.OK
+    assert results[0].summary == "Members: 5 (2 users, 3 groups)"
+
+
+def test_computer_name_from_local_member_without_computer_line(real_section):
+    assert real_section.computer == "SRV-APP01"
+
+
+def test_computer_line_wins():
+    section = _parse("computer|SRV01\n" + REAL_OUTPUT_GERMAN)
+    assert section.computer == "SRV01"
+    assert list(section.groups) == ["Administrators"]
+
+
+def test_hostname_placeholder_in_allow_list(real_section):
+    results = _check(
+        real_section,
+        {
+            "allowed": [r"CONTOSO\\srvadmins_$HOSTNAME$", r"$HOSTNAME$\\Administrator"],
+            "not_allowed_state": 2,
+        },
+    )
+    assert _state_of(results, "CONTOSO\\srvadmins_SRV-APP01") is State.OK
+    assert _state_of(results, "SRV-APP01\\Administrator") is State.OK
+    assert _state_of(results, "CONTOSO\\svc_backup") is State.CRIT
+
+
+def test_hostname_placeholder_does_not_allow_other_hosts_group():
+    section = _parse("computer|SRV-APP02\n" + REAL_OUTPUT_GERMAN)
+    results = _check(
+        section, {"allowed": [r"CONTOSO\\srvadmins_$HOSTNAME$"], "not_allowed_state": 2}
+    )
+    assert _state_of(results, "CONTOSO\\srvadmins_SRV-APP01") is State.CRIT
+
+
+def test_hostname_placeholder_in_additional_and_unwanted(real_section):
+    results = _check(
+        real_section,
+        {
+            "allowed_additional": [r"contoso\\SRVADMINS_$HOSTNAME$"],
+            "forbidden": [{"pattern": r"$HOSTNAME$\\.*", "state": 1}],
+        },
+    )
+    assert _state_of(results, "CONTOSO\\srvadmins_SRV-APP01") is State.OK
+    assert _state_of(results, "SRV-APP01\\Administrator") is State.WARN
+    assert _state_of(results, "CONTOSO\\svc_backup") is State.OK
+
+
+def test_hostname_placeholder_is_escaped():
+    # A dot in the computer name must not act as a wildcard.
+    section = _parse("computer|A.B\n" + REAL_OUTPUT_GERMAN.replace("SRV-APP01", "AXB"))
+    results = _check(
+        section, {"allowed": [r"CONTOSO\\srvadmins_$HOSTNAME$"], "not_allowed_state": 1}
+    )
+    assert _state_of(results, "CONTOSO\\srvadmins_AXB") is State.WARN
+
+
+def test_builtin_administrator_is_recognized_in_real_output(real_section):
+    results = _check(
+        real_section, {"local_users": {"state": 2, "ignore_builtin_administrator": True}}
+    )
+    assert _worst(results) is State.OK

@@ -1,13 +1,14 @@
 # Checkmk agent plugin: members of local groups on Windows hosts.
 #
 # Reports the members of the local Administrators group or of the groups listed
-# in the configuration file %MK_CONFDIR%\local_administrators.cfg:
+# in the configuration file %MK_CONFDIR%\local_group_members.cfg:
 #
 #   group=S-1-5-32-544           (SID of a built-in group, independent of the OS language)
 #   group=My local group         (name of any other local group)
 #
-# Output (section local_administrators, separated by pipes):
+# Output (section local_group_members, separated by pipes):
 #
+#   computer|<computer name>
 #   group|<key>|<group SID>|<group name>|<status>|<method>|<message>
 #   member|<key>|<member SID>|<member name>|<object class>|<principal source>
 #
@@ -24,7 +25,7 @@ $DefaultGroups = @('S-1-5-32-544')
 function Get-ConfiguredGroups {
     $confDir = $env:MK_CONFDIR
     if (-not $confDir) { return $DefaultGroups }
-    $confFile = Join-Path $confDir 'local_administrators.cfg'
+    $confFile = Join-Path $confDir 'local_group_members.cfg'
     if (-not (Test-Path -LiteralPath $confFile)) { return $DefaultGroups }
 
     $groups = @()
@@ -120,7 +121,9 @@ function Get-MembersWithAdsi([string]$GroupName) {
     }
 }
 
-Write-Output '<<<local_administrators:sep(124)>>>'
+Write-Output '<<<local_group_members:sep(124)>>>'
+# The check replaces $HOSTNAME$ in rule patterns by this name.
+Write-Output "computer|$env:COMPUTERNAME"
 
 # Domain controllers have no local groups.
 try {

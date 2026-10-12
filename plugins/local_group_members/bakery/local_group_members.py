@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Bakery plugin for local_administrators.ps1 (cmk.bakery.v2_unstable, Checkmk 2.5)."""
+"""Bakery plugin for local_group_members.ps1 (cmk.bakery.v2_unstable, Checkmk 2.5)."""
 
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Literal
 
 from cmk.bakery.v2_unstable import OS, BakeryPlugin, FileGenerator, Plugin, PluginConfig
-from cmk_addons.plugins.local_administrators.lib import WELL_KNOWN_GROUPS
+from cmk_addons.plugins.local_group_members.lib import WELL_KNOWN_GROUPS
 from pydantic import BaseModel
 
-PLUGIN_FILE = "local_administrators.ps1"
-CONFIG_FILE = "local_administrators.cfg"
+PLUGIN_FILE = "local_group_members.ps1"
+CONFIG_FILE = "local_group_members.cfg"
 
 
 class Deployment(BaseModel):
@@ -33,7 +33,7 @@ def config_lines(deployment: Deployment) -> Iterable[str]:
             yield f"group={name.strip()}"
 
 
-def get_local_administrators_files(conf: Config) -> FileGenerator:
+def get_local_group_members_files(conf: Config) -> FileGenerator:
     if conf.deployment[0] != "deploy":
         return
     deployment = conf.deployment[1]
@@ -51,9 +51,9 @@ def get_local_administrators_files(conf: Config) -> FileGenerator:
     )
 
 
-bakery_plugin_local_administrators = BakeryPlugin(
-    name="local_administrators",
+bakery_plugin_local_group_members = BakeryPlugin(
+    name="local_group_members",
     parameter_parser=Config.model_validate,
     default_parameters=None,
-    files_function=get_local_administrators_files,
+    files_function=get_local_group_members_files,
 )
