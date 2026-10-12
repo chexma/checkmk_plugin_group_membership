@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Agent bakery rule for the agent plugin local_group_members.ps1."""
+"""Agent bakery rule for the agent plugins local_group_members.ps1 and local_group_members.py."""
 
 from cmk.rulesets.v1 import Help, Label, Title
 from cmk.rulesets.v1.form_specs import (
+    BooleanChoice,
     CascadingSingleChoice,
     CascadingSingleChoiceElement,
     DefaultValue,
@@ -18,7 +19,69 @@ from cmk.rulesets.v1.form_specs import (
     validators,
 )
 from cmk.rulesets.v1.rule_specs import AgentConfig, Topic
-from cmk_addons.plugins.local_group_members.lib import DEFAULT_GROUPS, WELL_KNOWN_GROUPS
+from cmk_addons.plugins.local_group_members.lib import (
+    DEFAULT_GROUPS,
+    DEFAULT_LINUX_GROUPS,
+    LINUX_GROUPS,
+    WELL_KNOWN_GROUPS,
+)
+
+
+def _linux_form() -> Dictionary:
+    return Dictionary(
+        title=Title("Linux hosts"),
+        help_text=Help(
+            "Deploy the plugin to Linux hosts as well. There it reports the members "
+            "of the groups given here, including the users that have one of them as "
+            "primary group. Without this setting only Windows hosts get the plugin."
+        ),
+        elements={
+            "groups": DictElement(
+                parameter_form=MultipleChoice(
+                    title=Title("Groups"),
+                    help_text=Help(
+                        "Groups that do not exist on a host are skipped there, so one "
+                        "selection fits all distributions."
+                    ),
+                    elements=[
+                        MultipleChoiceElement(name=name, title=Title("%s") % name)
+                        for name in LINUX_GROUPS
+                    ],
+                    prefill=DefaultValue(DEFAULT_LINUX_GROUPS),
+                ),
+                required=True,
+            ),
+            "custom_groups": DictElement(
+                parameter_form=List(
+                    title=Title("Other groups"),
+                    add_element_label=Label("Add group"),
+                    element_template=String(
+                        custom_validate=(validators.LengthInRange(min_value=1),),
+                    ),
+                ),
+            ),
+            "sudoers": DictElement(
+                parameter_form=BooleanChoice(
+                    label=Label('Users and groups in the sudoers files (service "sudoers")'),
+                    help_text=Help(
+                        "Reports every user and group that <tt>/etc/sudoers</tt> and the "
+                        "files it includes grant commands to, and whether that is every "
+                        "command as root (ALL) or a restricted set. sudo rules that come "
+                        "from LDAP or SSSD are not read."
+                    ),
+                    prefill=DefaultValue(True),
+                ),
+                required=True,
+            ),
+            "uid0": DictElement(
+                parameter_form=BooleanChoice(
+                    label=Label('Accounts with UID 0 (service "UID 0")'),
+                    prefill=DefaultValue(True),
+                ),
+                required=True,
+            ),
+        },
+    )
 
 
 def _deployment_form() -> Dictionary:
@@ -26,7 +89,7 @@ def _deployment_form() -> Dictionary:
         elements={
             "builtin_groups": DictElement(
                 parameter_form=MultipleChoice(
-                    title=Title("Built-in groups"),
+                    title=Title("Windows: built-in groups"),
                     help_text=Help(
                         "These groups are addressed by their well-known SID, so the "
                         "selection works on Windows installations of any language."
@@ -41,7 +104,7 @@ def _deployment_form() -> Dictionary:
             ),
             "custom_groups": DictElement(
                 parameter_form=List(
-                    title=Title("Other local groups"),
+                    title=Title("Windows: other local groups"),
                     help_text=Help(
                         "Names of further local groups, exactly as they are named on the "
                         "host. Groups that do not exist on a host are skipped there."
@@ -52,6 +115,7 @@ def _deployment_form() -> Dictionary:
                     ),
                 ),
             ),
+            "linux": DictElement(parameter_form=_linux_form()),
             "interval": DictElement(
                 parameter_form=TimeSpan(
                     title=Title("Run asynchronously and cache the result"),
@@ -73,7 +137,9 @@ def _parameter_form() -> Dictionary:
     return Dictionary(
         help_text=Help(
             "Deploys the agent plugin <tt>local_group_members.ps1</tt>, which reports the "
-            "members of local groups on Windows hosts."
+            "members of local groups on Windows hosts, and optionally "
+            "<tt>local_group_members.py</tt>, which reports the members of privileged "
+            "groups, the sudoers entries and the accounts with UID 0 on Linux hosts."
         ),
         elements={
             "deployment": DictElement(
@@ -101,7 +167,7 @@ def _parameter_form() -> Dictionary:
 
 rule_spec_local_group_members_bakery = AgentConfig(
     name="local_group_members",
-    title=Title("Windows local group members"),
+    title=Title("Local group members (Windows, Linux)"),
     topic=Topic.OPERATING_SYSTEM,
     parameter_form=_parameter_form,
 )

@@ -35,12 +35,20 @@ _PATTERN_FORMAT = (
     "of the host, so one rule fits accounts that carry the name of their server:<br>"
     "<tt>CONTOSO\\\\srvadmins_$HOSTNAME$</tt> - on SRV01 the domain group srvadmins_SRV01<br>"
     "<tt>$HOSTNAME$\\\\adm_$HOSTNAME$</tt> - on SRV01 the local user adm_SRV01<br>"
-    "<tt>$HOSTNAME$\\\\.*</tt> - all local accounts of the host"
+    "<tt>$HOSTNAME$\\\\.*</tt> - all local accounts of the host<br><br>"
+    "<b>Linux:</b> members are named as on the host, without a domain. Groups in the "
+    "service <tt>sudoers</tt> start with a percent sign; instead of a SID there is "
+    "<tt>uid:&lt;number&gt;</tt> or <tt>gid:&lt;number&gt;</tt>. <tt>$HOSTNAME$</tt> is "
+    "the short host name.<br>"
+    "<tt>jdoe</tt> - the user jdoe<br>"
+    "<tt>%linux-admins</tt> - the group linux-admins in the sudoers files<br>"
+    "<tt>%adm_$HOSTNAME$</tt> - on srv01 the group adm_srv01<br>"
+    "<tt>uid:0</tt> - the account that owns UID 0, usually root"
 )
 
 _PATTERN_HELP = Help(
     "Complete name of a user or group, e.g. <tt>CONTOSO\\\\Domain Admins</tt>, or a SID. "
-    "Write the backslash twice."
+    "Write the backslash twice. On Linux e.g. <tt>jdoe</tt> or <tt>%linux-admins</tt>."
 )
 
 
@@ -52,7 +60,8 @@ def _parameter_form() -> Dictionary:
                     title=Title("Local users as members"),
                     help_text=Help(
                         "Set a state for local user accounts that are members of the group. "
-                        "Domain accounts and groups are not affected."
+                        "Domain accounts and groups are not affected. On Linux a user is "
+                        "local if it is listed in <tt>/etc/passwd</tt>."
                     ),
                     elements={
                         "state": DictElement(
@@ -64,7 +73,10 @@ def _parameter_form() -> Dictionary:
                         ),
                         "ignore_builtin_administrator": DictElement(
                             parameter_form=BooleanChoice(
-                                label=Label("Ignore the built-in Administrator account (RID 500)"),
+                                label=Label(
+                                    "Ignore the built-in Administrator account (RID 500) "
+                                    "and, on Linux, root"
+                                ),
                                 prefill=DefaultValue(True),
                             ),
                             required=True,
@@ -215,7 +227,7 @@ def _parameter_form() -> Dictionary:
 
 rule_spec_local_group_members = CheckParameters(
     name="local_group_members",
-    title=Title("Windows local group members"),
+    title=Title("Local group members (Windows, Linux)"),
     topic=Topic.OPERATING_SYSTEM,
     parameter_form=_parameter_form,
     condition=HostAndItemCondition(
@@ -223,7 +235,9 @@ rule_spec_local_group_members = CheckParameters(
         item_form=String(
             help_text=Help(
                 "Built-in groups are named in English on all hosts, e.g. "
-                "<tt>Administrators</tt> or <tt>Remote Desktop Users</tt>."
+                "<tt>Administrators</tt> or <tt>Remote Desktop Users</tt>. On Linux the "
+                "group name, e.g. <tt>sudo</tt> or <tt>wheel</tt>, or <tt>sudoers</tt> or "
+                "<tt>UID 0</tt>."
             ),
         ),
     ),

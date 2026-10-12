@@ -26,3 +26,13 @@ WELL_KNOWN_GROUPS: dict[str, tuple[str, str]] = {
 GROUP_NAME_BY_SID: dict[str, str] = {sid: name for sid, name in WELL_KNOWN_GROUPS.values()}
 
 DEFAULT_GROUPS = ["administrators"]
+
+# Linux: the group that grants sudo rights is named differently per distribution
+# (sudo on Debian, wheel on Red Hat and SUSE, admin on old Ubuntu). Groups that do
+# not exist on a host get no service, so all of them can be configured everywhere.
+DEFAULT_LINUX_GROUPS = ["sudo", "wheel", "admin", "root"]
+
+# Offered in the bakery ruleset. Besides the sudo groups: groups whose members
+# can become root by other means (containers, virtual machines, raw disks,
+# password hashes) or read the system logs.
+LINUX_GROUPS = [*DEFAULT_LINUX_GROUPS, "adm", "docker", "lxd", "libvirt", "disk", "shadow"]

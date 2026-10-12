@@ -12,6 +12,12 @@ Section format, separated by pipes (a character Windows forbids in account names
 does not exist) or "error" (the members could not be queried). The computer
 name is what rule patterns get for the placeholder $HOSTNAME$; without that line
 it is taken from the name of a local member.
+
+Linux hosts (agent plugin local_group_members.py) send the same section. Instead
+of a SID they report "uid:<n>", "gid:<n>" or, for names that cannot be resolved,
+"name:<name>"; the source is "Local", "Directory" or "Unknown". The entries of
+the sudoers files and the accounts with UID 0 come as the groups "sudoers" and
+"UID 0"; sudoers members have a further field with details ("ALL, NOPASSWD").
 """
 
 import re
@@ -50,6 +56,7 @@ class Member:
     name: str
     object_class: str
     source: str
+    details: str = ""
 
     @property
     def is_local_user(self) -> bool:
@@ -57,7 +64,10 @@ class Member:
 
     @property
     def is_builtin_administrator(self) -> bool:
-        return self.source == "Local" and self.sid.endswith("-500")
+        if self.source != "Local":
+            return False
+        # Windows: RID 500. Linux: root, but no other account that shares UID 0.
+        return self.sid.endswith("-500") or (self.sid == "uid:0" and self.name == "root")
 
 
 @dataclass
@@ -97,13 +107,14 @@ def parse_local_group_members(string_table: StringTable) -> Section:
             sid, name, status, method, message = rest[:5]
             groups[key] = Group(sid=sid, name=name, status=status, method=method, message=message)
         elif kind == "member" and key in groups:
-            sid, name, object_class, source = rest[:4]
+            sid, name, object_class, source, details = rest[:5]
             groups[key].members.append(
                 Member(
                     sid=sid,
                     name=name or sid,
                     object_class=_OBJECT_CLASSES.get(object_class.lower(), object_class),
                     source=source or "Unknown",
+                    details=details,
                 )
             )
     return Section(
@@ -242,7 +253,8 @@ def _evaluate_member(
 
 
 def _describe(member: Member) -> str:
-    return f"{member.name} ({member.object_class}, {member.source})"
+    details = f", {member.details}" if member.details else ""
+    return f"{member.name} ({member.object_class}, {member.source}{details})"
 
 
 def check_local_group_members(
@@ -272,7 +284,8 @@ def check_local_group_members(
     yield Metric("local_group_member_groups", groups)
     yield Result(
         state=State.OK,
-        notice=f"Group: {group.name} ({group.sid})",
+        # The Linux groups "sudoers" and "UID 0" are no real groups and have no ID.
+        notice=f"Group: {group.name} ({group.sid})" if group.sid else f"Group: {group.name}",
     )
 
     params = _expand_placeholders(params, section.computer)
@@ -330,6 +343,7 @@ def inventory_local_group_members(section: Section) -> InventoryResult:
                     "type": member.object_class,
                     "source": member.source,
                     "group_local_name": group.name,
+                    **({"details": member.details} if member.details else {}),
                 },
             )
 

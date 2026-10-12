@@ -433,3 +433,125 @@ def test_builtin_administrator_is_recognized_in_real_output(real_section):
         real_section, {"local_users": {"state": 2, "ignore_builtin_administrator": True}}
     )
     assert _worst(results) is State.OK
+
+
+# Output of the Linux agent plugin local_group_members.py.
+LINUX_OUTPUT = """\
+computer|srv-app01
+group|1|gid:27|sudo|ok|nss|
+member|1|uid:1000|alice|User|Local
+member|1|uid:20001|carol|User|Directory
+member|1|name:ghost|ghost|User|Unknown
+group|2||wheel|missing||
+group|3||sudoers|ok|sudoers|
+member|3|uid:0|root|User|Local|ALL
+member|3|gid:20500|%adm_srv-app01|Group|Directory|ALL, NOPASSWD
+member|3|uid:1000|alice|User|Local|restricted
+group|4||UID 0|ok|nss|
+member|4|uid:0|root|User|Local
+member|4|uid:0/toor|toor|User|Local
+"""
+
+
+@pytest.fixture(name="linux_section")
+def _linux_section():
+    return _parse(LINUX_OUTPUT)
+
+
+def test_linux_services(linux_section):
+    assert linux_section.computer == "srv-app01"
+    services = list(discover_local_group_members(linux_section))
+    assert [service.item for service in services] == ["sudo", "sudoers", "UID 0"]
+    assert services[0].parameters["discovered_members"] == {
+        "uid:1000": "alice",
+        "uid:20001": "carol",
+        "name:ghost": "ghost",
+    }
+    # Two accounts that share UID 0 are still two members.
+    assert len(services[2].parameters["discovered_members"]) == 2
+
+
+def test_linux_sudoers_details_and_metrics(linux_section):
+    results = _check(linux_section, {}, item="sudoers")
+    details = [r.details for r in results if isinstance(r, Result)]
+    assert "Group: sudoers" in details
+    assert "%adm_srv-app01 (Group, Directory, ALL, NOPASSWD)" in details
+    assert "alice (User, Local, restricted)" in details
+    assert Metric("local_group_member_users", 2) in results
+    assert Metric("local_group_member_groups", 1) in results
+
+
+def test_linux_root_counts_as_builtin_administrator_but_not_its_twins(linux_section):
+    params = {"local_users": {"state": 2, "ignore_builtin_administrator": True}}
+    results = _check(linux_section, params, item="UID 0")
+    assert _state_of(results, "root") is State.OK
+    assert _state_of(results, "toor") is State.CRIT
+
+
+def test_linux_patterns_and_hostname_placeholder(linux_section):
+    params = {
+        "allowed": ["root", "%adm_$HOSTNAME$"],
+        "not_allowed_state": 1,
+        "required": [{"pattern": "%adm_$HOSTNAME$", "state": 2}],
+    }
+    results = _check(linux_section, params, item="sudoers")
+    assert _state_of(results, "%adm_srv-app01") is State.OK
+    assert _state_of(results, "alice") is State.WARN
+    assert _missing(results) == []
+    assert (
+        _state_of(
+            _check(
+                linux_section, {"forbidden": [{"pattern": "uid:20001", "state": 2}]}, item="sudo"
+            ),
+            "carol",
+        )
+        is State.CRIT
+    )
+
+
+def test_linux_inventory_has_details_only_for_sudoers(linux_section):
+    rows = {
+        (row.key_columns["group"], row.key_columns["sid"]): row.inventory_columns
+        for row in inventory_local_group_members(linux_section)
+    }
+    assert rows[("sudoers", "uid:1000")]["details"] == "restricted"
+    assert "details" not in rows[("sudo", "uid:1000")]
+
+
+def test_bakery_deploys_linux_plugin_only_if_configured():
+    conf = Config.model_validate(
+        {
+            "deployment": (
+                "deploy",
+                {
+                    "builtin_groups": ["administrators"],
+                    "linux": {
+                        "groups": ["sudo"],
+                        "custom_groups": [" wheel "],
+                        "sudoers": True,
+                        "uid0": False,
+                    },
+                    "interval": 600.0,
+                },
+            )
+        }
+    )
+    files = list(get_local_group_members_files(conf))
+    assert files[2:] == [
+        Plugin(base_os=OS.LINUX, source=Path("local_group_members.py"), interval=600),
+        PluginConfig(
+            base_os=OS.LINUX,
+            lines=["group=sudo", "group=wheel", "group=@sudoers"],
+            target=Path("local_group_members.cfg"),
+            include_header=True,
+        ),
+    ]
+    assert [type(f) for f in files[:2]] == [Plugin, PluginConfig]
+
+
+def test_rule_forms_can_be_built():
+    # cmk-validate-plugins does not call the form functions of agent rules.
+    from cmk_addons.plugins.local_group_members.rulesets import agent_config, local_group_members
+
+    assert agent_config.rule_spec_local_group_members_bakery.parameter_form().elements
+    assert local_group_members.rule_spec_local_group_members.parameter_form().elements

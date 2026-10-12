@@ -5,6 +5,19 @@ and the release tags `v<version>`.
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-12
+
+- Linux: new agent plugin `local_group_members.py`. It reports the members of
+  privileged groups (`sudo`, `wheel`, ...), the users and groups named in the
+  sudoers files (service `Local group sudoers`, with `ALL` or `restricted`
+  and `NOPASSWD` in the details) and the accounts with UID 0 (service
+  `Local group UID 0`). Check, rule, metrics and inventory are the same as
+  for Windows.
+- Agent bakery rule: new setting "Linux hosts". Existing rules stay valid and
+  keep deploying to Windows hosts only.
+- The option to ignore the built-in Administrator also covers root on Linux.
+- Both rules are now titled "Local group members (Windows, Linux)".
+
 ## [2.5.2] - 2026-10-12
 
 - Rule option "Required members": users or groups that have to be members of
