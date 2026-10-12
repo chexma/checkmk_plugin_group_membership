@@ -1,0 +1,35 @@
+title: Windows: Members of Local Groups
+agents: windows
+catalog: os/security
+license: GPLv2
+distribution: Andre
+description:
+ This check monitors the members of local groups on Windows hosts, by default
+ the local Administrators group. It needs the agent plugin
+ {local_administrators.ps1}, which can be deployed and configured with the
+ agent bakery rule {Windows local group members}.
+
+ The plugin reads the members with {Get-LocalGroupMember} and falls back to
+ ADSI if the cmdlet is missing or fails. Built-in groups are addressed by
+ their SID, so the plugin works on Windows installations of any language.
+ Domain controllers have no local groups and report nothing.
+
+ Without a rule the check is always {OK} and lists the members in the
+ service details. With the rule {Windows local group members} it can go
+ {WARN} or {CRIT} if local users are members, if specific users or groups
+ are members, if a member is not on an allow list, or if members were added
+ or removed since the service discovery. Members on the allow list are always
+ {OK}.
+
+ If the group no longer exists or its members cannot be read, the check is
+ {UNKNOWN}; this state is configurable.
+
+ The members are also added to the HW/SW inventory below
+ {Software > Operating system}.
+
+item:
+ The name of the group. Built-in groups have their English name on all
+ hosts, e.g. {Administrators} or {Remote Desktop Users}.
+
+discovery:
+ One service is created for each configured group that exists on the host.

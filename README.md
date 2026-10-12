@@ -1,162 +1,153 @@
-# Checkmk plugin development template
+# Checkmk plugin: Windows local group members
 
-Devcontainer template for developing Checkmk extensions (agent-based checks,
-special agents, rulesets, graphing, bakery plugins, MKPs) with a real Checkmk
-site and Claude Code. Clone it once per plugin.
+Monitors which users and groups are members of local groups on Windows
+hosts, by default the local Administrators group. One service
+`Local group <name>` per group, an agent bakery rule to deploy and configure
+the agent plugin, and the members in the HW/SW inventory.
 
-What you get:
+Requires Checkmk 2.5 (the bakery plugin uses the bakery API v2,
+`cmk.bakery.v2_unstable`, which may still change until Checkmk 3.0).
 
-- A Checkmk site `cmk` (official `checkmk/check-mk-<edition>` image), started
-  on every container start, GUI login `cmkadmin`/`cmkadmin`
-- Workspace directories bind-mounted into the site's `local/` hierarchy, so
-  plugin changes are live without copying
-- Python tooling: pytest, pytest-cov and requests-mock in the site Python
-  (pytest ships with Checkmk 2.4, the image adds it for 2.5); black, isort and
-  flake8 in a separate venv (configured in `pyproject.toml` / `.flake8`)
-- Claude Code (native installer, updates itself) with the
-  [checkmk-plugin-dev skill](https://github.com/chexma/claude_code_checkmk_plugin_skill),
-  installed as a plugin and updated on every container start. Project
-  settings in `.claude/settings.json`: routine commands (pytest, black, isort,
-  flake8, `cmk -v`, `ci.sh`, `test-host.sh`) run without prompts,
-  `mkp release`/`mkp disable` are denied, and a hook formats every Python
-  file Claude edits with black/isort
-- `.devcontainer/build.sh` to build the MKP from the `package` manifest
-- `.devcontainer/test-host.sh` to create a host whose agent output comes from
-  a file, for discovery/check runs against canned data
-- GitHub Actions (`.github/workflows/ci.yml`): lint, pytest and
-  `cmk-validate-plugins` in the devcontainer image on every push; on a tag
-  `v<version>` also the MKP as a GitHub release
+> **Status:** the check, the rules and the bakery plugin are tested in a
+> Checkmk 2.5.0p15 site with canned agent output. The PowerShell agent plugin
+> has not been verified on real Windows hosts yet.
 
-Requirements: Docker (Desktop) and VS Code with the Dev Containers extension.
-`initializeCommand` uses `mkdir -p` on the host, i.e. a macOS/Linux host (or WSL).
+## How it works
 
-## Start a new plugin
+The agent plugin `local_administrators.ps1` reads the members with
+`Get-LocalGroupMember`. If the cmdlet is missing or fails (it does so when a
+group contains orphaned SIDs and, on some builds, Entra ID members), the
+plugin falls back to ADSI.
 
-```bash
-git clone https://github.com/chexma/checkmk-plugin-template.git checkmk_plugin_foo
-cd checkmk_plugin_foo
-.devcontainer/init-plugin.sh foo <url-of-the-new-plugin-repo>
-```
+Built-in groups are addressed by their well-known SID, and their service is
+named in English on every host (`Local group Administrators`, also on a German
+Windows where the group is called `Administratoren`). Rules therefore match
+hosts of any language. The localized object classes (`Benutzer`, `Gruppe`) are
+normalized to `User` and `Group`.
 
-`init-plugin.sh` creates `CLAUDE.local.md` (see below) and `plugins/foo/`,
-renames the template remote to `template` and sets `origin`
-(leave out the URL to keep the remotes as they are). Then:
+Domain controllers have no local groups: the plugin reports nothing there and
+no services are created.
 
-1. Set `EDITION` and `VARIANT` (Checkmk version) in
-   `.devcontainer/devcontainer.json`.
-2. Describe the plugin in `CLAUDE.local.md`, commit.
-3. VS Code: "Dev Containers: Reopen in Container". Without VS Code:
-   `npx -y @devcontainers/cli@latest up --workspace-folder .` builds and
-   starts the same container (VS Code reuses it later).
-4. First time only: run `claude` in the container terminal and log in. The
-   login lives in the Docker volume `checkmk-claude-config`, which all plugin
-   containers share, so this is needed once per machine, not per plugin.
-   Also accept the trust dialog for the workspace (once per plugin): until
-   then Claude Code ignores the project's permissions and the format hook in
-   `.claude/settings.json`.
-   Caveat: there are reports that Claude instances in several containers
-   writing `.claude.json` in that volume at the same moment can corrupt it
-   (Claude Code then asks for a new login). If you work that way, give each
-   project its own volume (`checkmk-claude-config-${localWorkspaceFolderBasename}`
-   in `devcontainer.json`).
-5. Open the Checkmk GUI via the forwarded port 5000 (Ports view), path `/cmk/`.
+## Installation
 
-## Claude instructions: CLAUDE.md and CLAUDE.local.md
-
-`CLAUDE.md` is generic (environment, commands, MKP rules), comes from the
-template and is tracked. Everything about the plugin itself (purpose,
-external system, architecture, conventions) goes into `CLAUDE.local.md`:
-Claude Code loads it next to `CLAUDE.md`, but git ignores it, so nothing
-about the plugin is exposed in the repo. It exists only on your machine, as
-does Claude's memory in the `checkmk-claude-config` volume: keep a copy if
-you need it elsewhere.
-
-## Test against canned agent output
+Download the MKP from the
+[releases](https://github.com/chexma/checkmk_plugin_local_administrators/releases) and install it under
+*Setup > Maintenance > Extension packages*, or on the command line as site
+user:
 
 ```bash
-.devcontainer/test-host.sh myhost temp/myhost.agent_output   # or a script with #!
-cmk -vI --detect-plugins=<plugin> myhost
-cmk -v --detect-plugins=<plugin> myhost
-.devcontainer/test-host.sh --remove myhost
+mkp add local_administrators-<version>.mkp
+mkp enable local_administrators <version>
 ```
 
-## CI and releases
+## Deploying the agent plugin
 
-`.devcontainer/ci.sh` runs the same checks as CI; run it before pushing.
-To release: bump `version` in `package`, commit, then
-`git tag v<version> && git push origin v<version>`. CI builds the MKP and
-attaches it to a GitHub release; it fails if the tag and `version` differ.
+**With the agent bakery** (commercial editions): rule
+*Setup > Agents > Windows, Linux, Solaris, AIX > Agent rules >
+Windows local group members*.
 
-## Migrate an existing plugin
+| Setting | Meaning |
+|---|---|
+| Built-in groups | Groups to monitor, selected from 15 built-in groups (Administrators, Remote Desktop Users, Backup Operators, Hyper-V Administrators, ...). Default: Administrators |
+| Other local groups | Names of further local groups, as they are named on the host |
+| Run asynchronously and cache the result | Run the plugin in the background and reuse its output for the given time |
 
-For plugin folders from an older devcontainer setup (with or without git):
-`.devcontainer/MIGRATION.md` is a step-by-step guide for Claude Code in the
-old container. In that container, ask Claude:
+**Manually:** copy
+`plugins/local_administrators/agents/local_administrators.ps1` to
+`C:\ProgramData\checkmk\agent\plugins\`. Without a configuration file the
+plugin reports the Administrators group. To monitor other groups, create
+`C:\ProgramData\checkmk\agent\config\local_administrators.cfg` with one line
+per group:
 
-```text
-Add https://github.com/chexma/checkmk-plugin-template.git as git remote
-"template" (run `git init -b main` first if this is no git repo), fetch it and
-follow `git show template/main:.devcontainer/MIGRATION.md`, phase 1.
+```
+group=S-1-5-32-544
+group=S-1-5-32-555
+group=My local group
 ```
 
-Then rebuild the container in VS Code and, in the new container:
-`Follow .devcontainer/MIGRATION.md, phase 2.`
+Use the SID for built-in groups and the name for all others.
 
-## Get template updates into a plugin repo
+After the first agent output, run a service discovery. A configured group
+that does not exist on a host gets no service there.
+
+## Check parameters
+
+Without a rule the services are always OK and list the members in the
+service details. Rule *Setup > Services > Service monitoring rules >
+Windows local group members*:
+
+| Setting | Effect |
+|---|---|
+| Local users as members | WARN or CRIT if a local user account is a member. The built-in Administrator (RID 500) can be ignored |
+| Unwanted members | List of pattern and state: WARN or CRIT if a matching user or group is a member |
+| Allowed members (allow list) | Matching members are always OK and exempt from all other settings |
+| Additionally allowed members | Added to the allow list, see below |
+| State for members that are not on the allow list | Makes the allow list strict: every other member gets this state |
+| Changes since the service discovery | State for members added or removed since the last discovery. Accept a change by updating the service parameters in the service discovery. Members on the allow list may be added without notice |
+| State if the group does not exist or cannot be queried | Default UNKNOWN |
+
+**Patterns** are regular expressions that must match the complete member name
+as shown in the service details, or the SID of the member. Upper and lower
+case are not distinguished. Write the backslash between domain and name
+twice:
+
+```
+CONTOSO\\Domain Admins
+SRV01\\.*
+.*\\svc_.*
+S-1-5-21-.*-500
+```
+
+**Overriding settings for specific hosts:** the rule can be restricted to
+hosts, folders, labels and groups like any Checkmk rule. A more specific rule
+above a general one overrides only the settings it contains. A list is
+replaced as a whole, though: to allow one more account on some hosts, set
+*Additionally allowed members* in the specific rule and leave the allow list
+to the general rule. If several rules with *Additionally allowed members*
+match a service, only the first one applies.
+
+## Inventory
+
+With the HW/SW inventory enabled, the members of all monitored groups are
+stored in the table `software > os > local_group_members` (group, member,
+type, source, SID), so they can be searched across hosts.
+
+## Section format
+
+```
+<<<local_administrators:sep(124)>>>
+group|<key>|<group SID>|<group name>|<status>|<method>|<message>
+member|<key>|<member SID>|<member name>|<object class>|<principal source>
+```
+
+`<status>` is `ok`, `missing` (the group does not exist) or `error` (the
+members could not be read). `<principal source>` is `Local`,
+`ActiveDirectory`, `AzureAD`, `MicrosoftAccount` or `Unknown`.
+
+## Development
+
+This repository is based on the
+[Checkmk plugin development template](https://github.com/chexma/checkmk-plugin-template)
+(devcontainer with a Checkmk site, see its README for the environment).
 
 ```bash
-git pull template main
+.devcontainer/ci.sh                                   # lint, tests, plugin validation
+.devcontainer/test-host.sh winsrv temp/winsrv.txt     # host with canned agent output
+cmk -vI --detect-plugins=local_administrators winsrv
+cmk -v --detect-plugins=local_administrators winsrv
+.devcontainer/build.sh                                # build the MKP from ./package
 ```
 
-Template files (`.devcontainer/`, tool configs) and plugin code don't
-overlap, so this usually merges cleanly.
+| Component | Location |
+|---|---|
+| Agent plugin | `plugins/local_administrators/agents/local_administrators.ps1` |
+| Section, check and inventory plugin | `plugins/local_administrators/agent_based/local_administrators.py` |
+| Check parameters | `plugins/local_administrators/rulesets/local_administrators.py` |
+| Bakery rule | `plugins/local_administrators/rulesets/agent_config.py` |
+| Bakery plugin | `plugins/local_administrators/bakery/local_administrators.py` |
+| Built-in group table | `plugins/local_administrators/lib.py` |
+| Tests | `tests/test_local_administrators.py` |
 
-## Layout
-
-| Directory | Mounted / linked to (site `cmk`) | Use |
-|---|---|---|
-| `plugins/` | `local/lib/python3/cmk_addons/plugins/` | New-style plugins (`<family>/agent_based`, `rulesets`, ...) |
-| `lib/` | `local/lib/python3/cmk/` | Library extensions (e.g. bakery v1) |
-| `plugins_legacy/` | `local/share/check_mk/` | Legacy plugin locations |
-| `agents/` | `local/share/check_mk/agents/` | Agent plugins for the bakery |
-| `bin/` | `local/bin/` | Scripts |
-| `nagios_plugins/` | `local/lib/nagios/plugins/` | Active check executables |
-| `temp/` | – | Scratch space (test data, agent output), not tracked |
-| `tests/` | – | pytest |
-
-## Notes
-
-- The container starts the site, cleans stale PID files and refreshes the
-  skill plugin on **every** start; the log is
-  `~/var/log/devcontainer-poststart.log`.
-- `.devcontainer/requirements-site.txt` is installed into the site by
-  `install-site-requirements.py`: the site's `pip3` always installs with
-  `--target`, which would otherwise add local copies of packages Checkmk ships
-  (urllib3, requests, pytest, ...) that shadow the shipped ones. The script
-  installs with `--no-deps` and adds only dependencies the Checkmk version
-  lacks, at the versions in `constraints-site.txt` (pin new ones there).
-  Standalone tools go into `requirements-tools.txt` (own venv).
-- All tool versions are pinned; bump them deliberately and rebuild. VS Code
-  is configured to use the pinned black/isort/flake8 from the image, not the
-  ones bundled with its extensions.
-- Rebuilds pick up a new Checkmk version from `VARIANT`; Claude Code updates
-  itself, no rebuild needed for that. Checkmk 2.5 renamed the editions
-  (images `check-mk-community`, `-pro`, `-ultimate`, `-ultimatemt`; `cloud`
-  became `ultimate`), so moving to 2.5 changes `EDITION` too.
-- The Checkmk images exist for `linux/amd64` only. On Apple Silicon they run
-  emulated; enable "Use Rosetta for x86_64/amd64 emulation" in Docker Desktop.
-- Releases are documented in `Changelog.md`; built `*.mkp` files are not
-  tracked (CI attaches them to the GitHub release).
-- Since Checkmk 2.5 every config generation (`cmk -U`/`-R`, activation)
-  copies `~/local` into a snapshot and fails on symlinks there that point to
-  directories outside it (`IsADirectoryError`). Workspace directories are
-  therefore bind mounts, never symlinks. Containers created from older
-  template versions had such links (`~/local/tmp`, `~/local/lib/nagios/plugins`):
-  pull the template and rebuild. Until then:
-  `rm ~/local/tmp ~/local/lib/nagios/plugins` (removes only the links) and
-  `cmk -R`; active checks in `nagios_plugins/` are unavailable meanwhile.
-- Several plugin containers can run at once: port 5000 is forwarded to a free
-  local port per container.
-- No CPU or memory limits are set. If Pylance (installed with the Python
-  extension) gets killed on large code bases, give the Docker Desktop VM more
-  memory; `--memory=...` in `runArgs` would only add a cap.
+Releases are documented in `Changelog.md`. To release: bump `version` in
+`package`, commit, then `git tag v<version> && git push origin v<version>`;
+CI builds the MKP and attaches it to a GitHub release.

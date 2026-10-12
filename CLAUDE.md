@@ -33,6 +33,14 @@ Workspace directories are bind-mounted into the site:
 | `nagios_plugins/` | `~/local/lib/nagios/plugins/` |
 | `temp/` | not in the site; scratch space at `$WORKSPACE/temp`, not tracked |
 
+Where agent plugins go depends on the bakery API: with bakery API v2
+(`cmk.bakery.v2_unstable`, Checkmk 2.5) their sources live in the plugin
+family, `plugins/<name>/agents/`; `agents/` is only for bakery API v1 and
+for plugins without a bakery plugin.
+
+After adding or changing a ruleset, run `omd restart apache` before using it
+via the GUI or the REST API (`Unknown ruleset` otherwise).
+
 Never create symlinks in `~/local` that point to directories outside it:
 since Checkmk 2.5 every config generation (`cmk -U`/`-R`, activation)
 snapshots `~/local` and fails on them (`IsADirectoryError`).
@@ -78,6 +86,10 @@ mkp template <name>    # writes ~/tmp/check_mk/<name>.manifest.temp
 # site), set title/author/description/version/version.min_required, then:
 cp ~/tmp/check_mk/<name>.manifest.temp "$WORKSPACE/package"
 ```
+
+If `mkp template` only prints the manifest instead of writing that file,
+write `package` from the printed output. The untrimmed list also contains
+the site's test tooling under `lib` (pytest, coverage, ...): remove it.
 
 Each build:
 
