@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Metrics, graph and perfometer for the services "Local group <name>"."""
+"""Metrics, graph and perfometer for the services "Group Membership <name>"."""
 
 from cmk.graphing.v1 import Title
 from cmk.graphing.v1.graphs import Graph, MinimalRange

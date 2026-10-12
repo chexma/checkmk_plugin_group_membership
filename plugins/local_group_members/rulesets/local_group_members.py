@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check parameters for the services "Local group <name>"."""
+"""Check parameters for the services "Group Membership <name>"."""
 
 from cmk.rulesets.v1 import Help, Label, Title
 from cmk.rulesets.v1.form_specs import (

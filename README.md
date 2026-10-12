@@ -7,7 +7,7 @@ Monitors who has administrative rights on a server:
 - **Linux:** the members of privileged groups (`sudo`, `wheel`, ...), the
   users and groups named in the sudoers files and the accounts with UID 0.
 
-One service `Local group <name>` per group, an agent bakery rule to deploy
+One service `Group Membership <name>` per group, an agent bakery rule to deploy
 and configure the agent plugins, and the members in the HW/SW inventory.
 
 Requires Checkmk 2.5 (the bakery plugin uses the bakery API v2,
@@ -32,7 +32,7 @@ group contains orphaned SIDs and, on some builds, Entra ID members), the
 plugin falls back to ADSI.
 
 Built-in groups are addressed by their well-known SID, and their service is
-named in English on every host (`Local group Administrators`, also on a German
+named in English on every host (`Group Membership Administrators`, also on a German
 Windows where the group is called `Administratoren`). Rules therefore match
 hosts of any language. The localized object classes (`Benutzer`, `Gruppe`) are
 normalized to `User` and `Group`.
@@ -48,9 +48,9 @@ three things, each as a service:
 
 | Service | Members |
 |---|---|
-| `Local group sudo`, `Local group wheel`, ... | The members of the group and the users that have it as primary group. Read through NSS, so accounts from SSSD or LDAP are included |
-| `Local group sudoers` | Every user and `%group` that `/etc/sudoers` and the files it includes grant commands to. The details say `ALL` (every command as root) or `restricted`, and `NOPASSWD` |
-| `Local group UID 0` | All accounts with UID 0 |
+| `Group Membership sudo`, `Group Membership wheel`, ... | The members of the group and the users that have it as primary group. Read through NSS, so accounts from SSSD or LDAP are included |
+| `Group Membership sudoers` | Every user and `%group` that `/etc/sudoers` and the files it includes grant commands to. The details say `ALL` (every command as root) or `restricted`, and `NOPASSWD` |
+| `Group Membership UID 0` | All accounts with UID 0 |
 
 A member is identified by `uid:<number>` or `gid:<number>` where Windows has a
 SID. Its source is `Local` (listed in `/etc/passwd` or `/etc/group`),

@@ -5,6 +5,14 @@ and the release tags `v<version>`.
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-12
+
+- The services are now named `Group Membership <name>` instead of
+  `Local group <name>`. After the update run a service discovery on the
+  hosts: the old services vanish and the new ones start without history.
+  Rules that match on the item (the group name) keep working; views, BI
+  rules or notification rules that match the service name need the new name.
+
 ## [2.6.0] - 2026-10-12
 
 - Linux: new agent plugin `local_group_members.py`. It reports the members of

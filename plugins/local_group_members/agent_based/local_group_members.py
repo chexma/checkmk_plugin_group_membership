@@ -324,7 +324,7 @@ def check_local_group_members(
 
 check_plugin_local_group_members = CheckPlugin(
     name="local_group_members",
-    service_name="Local group %s",
+    service_name="Group Membership %s",
     discovery_function=discover_local_group_members,
     check_function=check_local_group_members,
     check_default_parameters={"query_error_state": State.UNKNOWN.value},
