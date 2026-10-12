@@ -26,6 +26,7 @@ from cmk.agent_based.v2 import (
     DiscoveryResult,
     InventoryPlugin,
     InventoryResult,
+    Metric,
     Result,
     Service,
     State,
@@ -173,6 +174,16 @@ def _expand_placeholders(params: Mapping[str, Any], computer: str) -> Mapping[st
         expanded["forbidden"] = [
             {**rule, "pattern": expand(rule["pattern"])} for rule in params["forbidden"]
         ]
+    if "required" in params:
+        # "shown" is the pattern for the service output: without regex escaping of the name.
+        expanded["required"] = [
+            {
+                **rule,
+                "pattern": expand(rule["pattern"]),
+                "shown": rule["pattern"].replace(HOSTNAME_PLACEHOLDER, computer),
+            }
+            for rule in params["required"]
+        ]
     return expanded
 
 
@@ -180,6 +191,7 @@ def _invalid_patterns(params: Mapping[str, Any]) -> Sequence[str]:
     patterns = [
         *_allowed_patterns(params),
         *(rule["pattern"] for rule in params.get("forbidden", [])),
+        *(rule["pattern"] for rule in params.get("required", [])),
     ]
     invalid = []
     for pattern in patterns:
@@ -194,6 +206,9 @@ def _evaluate_member(
     member: Member, params: Mapping[str, Any], group_was_discovered: bool
 ) -> tuple[State, Sequence[str]]:
     """Return the state of one member and the reasons for it."""
+    # A member the rule demands cannot be unwanted at the same time.
+    if _matches((rule["pattern"] for rule in params.get("required", [])), member):
+        return State.OK, ["required"]
     if _matches(_allowed_patterns(params), member):
         return State.OK, ["allowed"]
 
@@ -253,6 +268,8 @@ def check_local_group_members(
         state=State.OK,
         summary=f"Members: {len(members)} ({users} users, {groups} groups)",
     )
+    yield Metric("local_group_member_users", users)
+    yield Metric("local_group_member_groups", groups)
     yield Result(
         state=State.OK,
         notice=f"Group: {group.name} ({group.sid})",
@@ -270,6 +287,16 @@ def check_local_group_members(
         state, reasons = _evaluate_member(member, params, group_was_discovered)
         text = _describe(member) + (": " + ", ".join(reasons) if reasons else "")
         yield Result(state=state, notice=text)
+
+    for rule in params.get("required", []):
+        # An invalid pattern is reported above; it matches nobody.
+        if rule["pattern"] not in invalid and not any(
+            _pattern_matches(rule["pattern"], member) for member in members
+        ):
+            yield Result(
+                state=State(rule["state"]),
+                notice=f"Required member missing: {rule.get('shown', rule['pattern'])}",
+            )
 
     changes = params.get("membership_changes")
     if changes and group_was_discovered:

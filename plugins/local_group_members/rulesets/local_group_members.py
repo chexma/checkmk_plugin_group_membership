@@ -101,6 +101,37 @@ def _parameter_form() -> Dictionary:
                     ),
                 ),
             ),
+            "required": DictElement(
+                parameter_form=List(
+                    title=Title("Required members"),
+                    help_text=Help(
+                        "Users or groups that have to be members of the group. For every "
+                        "entry that matches no member, the service gets the state of that "
+                        "entry. Required members are always OK, like the members on the "
+                        "allow list." + _PATTERN_FORMAT
+                    ),
+                    add_element_label=Label("Add required member"),
+                    element_template=Dictionary(
+                        elements={
+                            "pattern": DictElement(
+                                parameter_form=RegularExpression(
+                                    title=Title("User or group"),
+                                    help_text=_PATTERN_HELP,
+                                    predefined_help_text=MatchingScope.FULL,
+                                ),
+                                required=True,
+                            ),
+                            "state": DictElement(
+                                parameter_form=ServiceState(
+                                    title=Title("State if missing"),
+                                    prefill=DefaultValue(ServiceState.CRIT),
+                                ),
+                                required=True,
+                            ),
+                        },
+                    ),
+                ),
+            ),
             "allowed": DictElement(
                 parameter_form=List(
                     title=Title("Allowed members (allow list)"),

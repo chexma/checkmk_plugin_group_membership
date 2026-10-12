@@ -5,6 +5,15 @@ and the release tags `v<version>`.
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-10-12
+
+- Rule option "Required members": users or groups that have to be members of
+  the group, each with the state the service gets if it is missing. Required
+  members are always OK, like the members on the allow list. `$HOSTNAME$` is
+  supported.
+- Metrics for the number of users and of groups among the members, with a
+  graph and a Perf-O-Meter.
+
 ## [2.5.1] - 2026-10-12
 
 - Placeholder `$HOSTNAME$` in the patterns of allowed, additionally allowed

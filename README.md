@@ -82,6 +82,7 @@ Windows local group members*:
 |---|---|
 | Local users as members | WARN or CRIT if a local user account is a member. The built-in Administrator (RID 500) can be ignored |
 | Unwanted members | List of pattern and state: WARN or CRIT if a matching user or group is a member |
+| Required members | List of pattern and state: WARN or CRIT for every entry that matches no member. Required members are always OK, like those on the allow list |
 | Allowed members (allow list) | Matching members are always OK and exempt from all other settings |
 | Additionally allowed members | Added to the allow list, see below |
 | State for members that are not on the allow list | Makes the allow list strict: every other member gets this state |
@@ -118,6 +119,12 @@ replaced as a whole, though: to allow one more account on some hosts, set
 *Additionally allowed members* in the specific rule and leave the allow list
 to the general rule. If several rules with *Additionally allowed members*
 match a service, only the first one applies.
+
+## Metrics
+
+Every service reports the number of users and of groups among the members
+(`local_group_member_users`, `local_group_member_groups`), with a graph and a
+Perf-O-Meter.
 
 ## Inventory
 
@@ -157,6 +164,7 @@ cmk -v --detect-plugins=local_group_members winsrv
 | Agent plugin | `plugins/local_group_members/agents/local_group_members.ps1` |
 | Section, check and inventory plugin | `plugins/local_group_members/agent_based/local_group_members.py` |
 | Check parameters | `plugins/local_group_members/rulesets/local_group_members.py` |
+| Metrics, graph, Perf-O-Meter | `plugins/local_group_members/graphing/local_group_members.py` |
 | Bakery rule | `plugins/local_group_members/rulesets/agent_config.py` |
 | Bakery plugin | `plugins/local_group_members/bakery/local_group_members.py` |
 | Built-in group table | `plugins/local_group_members/lib.py` |

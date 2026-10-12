@@ -17,8 +17,9 @@ description:
  Without a rule the check is always {OK} and lists the members in the
  service details. With the rule {Windows local group members} it can go
  {WARN} or {CRIT} if local users are members, if specific users or groups
- are members, if a member is not on an allow list, or if members were added
- or removed since the service discovery. Members on the allow list are always
+ are members, if a required user or group is not a member, if a member is
+ not on an allow list, or if members were added or removed since the service
+ discovery. Members on the allow list are always
  {OK}.
 
  In the patterns of the rule the placeholder {$HOSTNAME$} stands for the
@@ -26,6 +27,9 @@ description:
 
  If the group no longer exists or its members cannot be read, the check is
  {UNKNOWN}; this state is configurable.
+
+ The check reports the number of users and of groups among the members as
+ metrics.
 
  The members are also added to the HW/SW inventory below
  {Software > Operating system}.

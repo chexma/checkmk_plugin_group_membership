@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import pytest
-from cmk.agent_based.v2 import Result, Service, State, TableRow
+from cmk.agent_based.v2 import Metric, Result, Service, State, TableRow
 from cmk.bakery.v2_unstable import OS, Plugin, PluginConfig
 from cmk_addons.plugins.local_group_members.agent_based.local_group_members import (
     check_local_group_members,
@@ -83,7 +83,10 @@ def test_check_without_rule_is_ok_and_lists_members(section):
     results = _check(section, {})
     assert _worst(results) is State.OK
     assert results[0].summary == "Members: 4 (3 users, 1 groups)"
-    assert sum(r.details.startswith(("WINSRV", "CONTOSO")) for r in results) == 4
+    assert (
+        sum(r.details.startswith(("WINSRV", "CONTOSO")) for r in results if isinstance(r, Result))
+        == 4
+    )
 
 
 def test_check_unknown_item_yields_nothing(section):
@@ -175,6 +178,75 @@ def test_additionally_allowed_members_without_allow_list(section):
         },
     )
     assert _worst(results) is State.OK
+
+
+def _missing(results):
+    return [
+        (r.state, r.details)
+        for r in results
+        if isinstance(r, Result) and r.details.startswith("Required member missing")
+    ]
+
+
+def test_required_members_present_and_missing(section):
+    results = _check(
+        section,
+        {
+            "required": [
+                {"pattern": r"contoso\\domänen-admins", "state": 2},
+                {"pattern": f"{DOMAIN}-1105", "state": 2},
+                {"pattern": r"CONTOSO\\Server Admins", "state": 2},
+                {"pattern": r"CONTOSO\\monitoring", "state": 1},
+            ]
+        },
+    )
+    assert _missing(results) == [
+        (State.CRIT, r"Required member missing: CONTOSO\\Server Admins"),
+        (State.WARN, r"Required member missing: CONTOSO\\monitoring"),
+    ]
+    assert _worst(results) == State.CRIT
+
+
+def test_required_members_are_exempt_like_allowed_ones(section):
+    results = _check(
+        section,
+        {
+            "required": [{"pattern": r"WINSRV\\backup", "state": 2}],
+            "local_users": {"state": 2, "ignore_builtin_administrator": True},
+            "forbidden": [{"pattern": r"WINSRV\\backup", "state": 2}],
+            "not_allowed_state": 1,
+        },
+    )
+    assert _missing(results) == []
+    assert _state_of(results, "WINSRV\\backup") == State.OK
+    assert _state_of(results, "CONTOSO\\svc_deploy") == State.WARN
+
+
+def test_required_member_with_hostname_placeholder():
+    section = _parse(REAL_OUTPUT_GERMAN)
+    present = _check(
+        section, {"required": [{"pattern": r"CONTOSO\\srvadmins_$HOSTNAME$", "state": 2}]}
+    )
+    assert _missing(present) == []
+    absent = _check(section, {"required": [{"pattern": r"CONTOSO\\other_$HOSTNAME$", "state": 2}]})
+    assert _missing(absent) == [(State.CRIT, r"Required member missing: CONTOSO\\other_SRV-APP01")]
+
+
+def test_required_invalid_regex_is_reported(section):
+    results = _check(section, {"required": [{"pattern": "CONTOSO(", "state": 2}]})
+    assert _worst(results) == State.UNKNOWN
+    assert _missing(results) == []
+
+
+def test_metrics_count_users_and_groups(section):
+    assert [r for r in _check(section, {}) if isinstance(r, Metric)] == [
+        Metric("local_group_member_users", 3),
+        Metric("local_group_member_groups", 1),
+    ]
+
+
+def test_no_metrics_if_the_group_cannot_be_queried(section):
+    assert not [r for r in _check(section, {}, item="App Admins") if isinstance(r, Metric)]
 
 
 def test_membership_changes(section):
