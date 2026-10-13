@@ -555,3 +555,14 @@ def test_rule_forms_can_be_built():
 
     assert agent_config.rule_spec_local_group_members_bakery.parameter_form().elements
     assert local_group_members.rule_spec_local_group_members.parameter_form().elements
+
+
+def test_inventory_ui_knows_all_inventory_columns(linux_section, section):
+    from cmk_addons.plugins.local_group_members.inventory_ui.local_group_members import (
+        node_software_os_local_group_members as node,
+    )
+
+    rows = [*inventory_local_group_members(linux_section), *inventory_local_group_members(section)]
+    assert list(node.path) == rows[0].path
+    for row in rows:
+        assert {*row.key_columns, *row.inventory_columns} <= set(node.table.columns)

@@ -200,8 +200,22 @@ Perf-O-Meter.
 
 With the HW/SW inventory enabled, the members of all monitored groups are
 stored in the table `software > os > local_group_members` (group, member,
-type, source, SID, and for sudoers entries the details), so they can be
-searched across hosts.
+type, source, SID, and for sudoers entries the details).
+
+The table is available as *Group memberships* in three places:
+
+- in the inventory tree of a host, below *Software > Operating system*,
+- as the views *Inventory > Search Group memberships* (all hosts; it shows
+  rows after you apply a filter, an empty one is enough) and
+  *Group memberships* of a single host,
+- as data source *Inventory table: Group memberships* for your own views,
+  which can then be put on a dashboard.
+
+The HW/SW inventory has to be enabled for the hosts with the rule
+*Setup > Hosts > HW/SW inventory rules > Do hardware/software inventory*. The
+rules that Checkmk ships only cover a few kinds of hosts (Checkmk servers,
+Docker, Kubernetes, Azure), so Windows and Linux servers need a rule of their
+own. The data appears after the service *Check_MK HW/SW Inventory* has run.
 
 ## Section format
 
@@ -246,6 +260,7 @@ python3 plugins/local_group_members/agents/local_group_members.py   # the Linux 
 | Section, check and inventory plugin | `plugins/local_group_members/agent_based/local_group_members.py` |
 | Check parameters | `plugins/local_group_members/rulesets/local_group_members.py` |
 | Metrics, graph, Perf-O-Meter | `plugins/local_group_members/graphing/local_group_members.py` |
+| Inventory table: titles and views | `plugins/local_group_members/inventory_ui/local_group_members.py` |
 | Bakery rule | `plugins/local_group_members/rulesets/agent_config.py` |
 | Bakery plugin | `plugins/local_group_members/bakery/local_group_members.py` |
 | Built-in group table | `plugins/local_group_members/lib.py` |

@@ -5,6 +5,13 @@ and the release tags `v<version>`.
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-10-13
+
+- The inventory table is now available for views and dashboards: data source
+  "Inventory table: Group memberships", the views "Search Group memberships"
+  (all hosts) and "Group memberships" of a host, and readable column titles
+  in the inventory tree.
+
 ## [2.7.0] - 2026-10-12
 
 - The services are now named `Group Membership <name>` instead of
