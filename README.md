@@ -72,7 +72,7 @@ Limits:
 ## Installation
 
 Download the MKP from the
-[releases](https://github.com/chexma/checkmk_plugin_local_administrators/releases) and install it under
+[releases](https://github.com/chexma/checkmk_plugin_group_membership/releases) and install it under
 *Setup > Maintenance > Extension packages*, or on the command line as site
 user:
 

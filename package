@@ -18,7 +18,7 @@
                 '\n'
                 'Includes an agent bakery rule and plugin (bakery API v2, '
                 'Checkmk 2.5) to deploy the plugins and select the groups.\n',
- 'download_url': 'https://github.com/chexma/checkmk_plugin_local_administrators',
+ 'download_url': 'https://github.com/chexma/checkmk_plugin_group_membership',
  'files': {'cmk_addons_plugins': ['local_group_members/agent_based/local_group_members.py',
                                   'local_group_members/agents/local_group_members.ps1',
                                   'local_group_members/agents/local_group_members.py',
