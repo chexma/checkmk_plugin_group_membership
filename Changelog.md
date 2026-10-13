@@ -6,6 +6,11 @@ version the plugin is made for (2.5); only the third one counts up.
 
 ## [Unreleased]
 
+- New script `tools/New-GroupMemberAllowRule.ps1` (not part of the MKP): reads
+  the members reported by services in the state WARN and creates one disabled
+  rule per host and group with them in "Additionally allowed members", ready
+  to be reviewed and enabled.
+
 ## [2.5.3] - 2026-10-13
 
 - Linux: new agent plugin `local_group_members.py`. It reports the members of

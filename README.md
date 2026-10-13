@@ -190,6 +190,36 @@ replaced as a whole, though: to allow one more account on some hosts, set
 to the general rule. If several rules with *Additionally allowed members*
 match a service, only the first one applies.
 
+### Proposing host specific rules with a script
+
+`tools/New-GroupMemberAllowRule.ps1` turns the members reported by services in
+the state WARN into rules, so that approving them is a review instead of
+typing. It runs on any computer with Windows PowerShell 5.1 or PowerShell 7
+and talks to the REST API; it is not part of the MKP.
+
+```powershell
+$env:CMK_SECRET = '<automation secret>'
+.\New-GroupMemberAllowRule.ps1 -Server monitoring.example.com -Site prod -User automation -WhatIf
+.\New-GroupMemberAllowRule.ps1 -Server monitoring.example.com -Site prod -User automation
+```
+
+For every host and group it creates one **disabled** rule with the reported
+members as exact names in *Additionally allowed members*; the comment of the
+rule lists them with the reason. Review the rule in Setup, enable it and
+activate the changes. Members reported as *unwanted member* are never
+proposed.
+
+- Run it as often as you like: members that are already in the rule are not
+  added twice, new ones are added to the rule as long as it is disabled.
+- If the rule of a host and group is already enabled, it is left alone. The
+  script puts a disabled rule with the old and the new members in front of
+  it: enable that one and delete the old rule.
+- `-HostFilter <regex>`, `-Group <name>` and `-State WARN,CRIT` narrow the
+  selection, `-Folder` sets the folder of new rules. The output can be piped
+  to `Export-Csv` to keep a list. `Get-Help .\New-GroupMemberAllowRule.ps1 -Full`
+  shows all parameters.
+- The user needs to see the services and the permission to edit rules.
+
 ## Metrics
 
 Every service reports the number of users and of groups among the members
