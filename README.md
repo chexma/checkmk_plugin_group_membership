@@ -266,6 +266,7 @@ python3 plugins/local_group_members/agents/local_group_members.py   # the Linux 
 | Built-in group table | `plugins/local_group_members/lib.py` |
 | Tests | `tests/test_local_group_members.py`, `tests/test_agent_linux.py` |
 
-Releases are documented in `Changelog.md`. To release: bump `version` in
-`package`, commit, then `git tag v<version> && git push origin v<version>`;
+Releases are documented in `Changelog.md`. The version is `2.5.<n>`: the first
+two numbers are the Checkmk version the plugin is made for, only the third
+one counts up. To release: bump `version` in `package`, commit, then `git tag v<version> && git push origin v<version>`;
 CI builds the MKP and attaches it to a GitHub release.

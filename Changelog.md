@@ -1,37 +1,32 @@
 # Changelog
 
 All notable changes to this plugin. Versions match `version` in `package`
-and the release tags `v<version>`.
+and the release tags `v<version>`. The first two numbers are the Checkmk
+version the plugin is made for (2.5); only the third one counts up.
 
 ## [Unreleased]
 
-## [2.7.1] - 2026-10-13
+## [2.5.3] - 2026-10-13
 
-- The inventory table is now available for views and dashboards: data source
-  "Inventory table: Group memberships", the views "Search Group memberships"
-  (all hosts) and "Group memberships" of a host, and readable column titles
-  in the inventory tree.
-
-## [2.7.0] - 2026-10-12
-
+- Linux: new agent plugin `local_group_members.py`. It reports the members of
+  privileged groups (`sudo`, `wheel`, ...), the users and groups named in the
+  sudoers files (service `Group Membership sudoers`, with `ALL` or
+  `restricted` and `NOPASSWD` in the details) and the accounts with UID 0
+  (service `Group Membership UID 0`). Check, rule, metrics and inventory are
+  the same as for Windows.
+- Agent bakery rule: new setting "Linux hosts". Existing rules stay valid and
+  keep deploying to Windows hosts only.
+- The option to ignore the built-in Administrator also covers root on Linux.
+- Both rules are now titled "Local group members (Windows, Linux)".
 - The services are now named `Group Membership <name>` instead of
   `Local group <name>`. After the update run a service discovery on the
   hosts: the old services vanish and the new ones start without history.
   Rules that match on the item (the group name) keep working; views, BI
   rules or notification rules that match the service name need the new name.
-
-## [2.6.0] - 2026-10-12
-
-- Linux: new agent plugin `local_group_members.py`. It reports the members of
-  privileged groups (`sudo`, `wheel`, ...), the users and groups named in the
-  sudoers files (service `Local group sudoers`, with `ALL` or `restricted`
-  and `NOPASSWD` in the details) and the accounts with UID 0 (service
-  `Local group UID 0`). Check, rule, metrics and inventory are the same as
-  for Windows.
-- Agent bakery rule: new setting "Linux hosts". Existing rules stay valid and
-  keep deploying to Windows hosts only.
-- The option to ignore the built-in Administrator also covers root on Linux.
-- Both rules are now titled "Local group members (Windows, Linux)".
+- The inventory table is now available for views and dashboards: data source
+  "Inventory table: Group memberships", the views "Search Group memberships"
+  (all hosts) and "Group memberships" of a host, and readable column titles
+  in the inventory tree.
 
 ## [2.5.2] - 2026-10-12
 
