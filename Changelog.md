@@ -6,6 +6,8 @@ version the plugin is made for (2.5); only the third one counts up.
 
 ## [Unreleased]
 
+## [2.5.4] - 2026-10-13
+
 - New script `tools/New-GroupMemberAllowRule.ps1` (not part of the MKP): reads
   the members reported by services in the state WARN and creates one disabled
   rule per host and group with them in "Additionally allowed members", ready
