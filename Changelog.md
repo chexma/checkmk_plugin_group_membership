@@ -6,6 +6,10 @@ version the plugin is made for (2.5); only the third one counts up.
 
 ## [Unreleased]
 
+- `tools/New-GroupMemberAllowRule.ps1`: new rules go to the top of their folder
+  (`-Position Bottom` for the end), and `-Enable` enables the disabled rules
+  created by the script after the review.
+
 ## [2.5.4] - 2026-10-13
 
 - New script `tools/New-GroupMemberAllowRule.ps1` (not part of the MKP): reads

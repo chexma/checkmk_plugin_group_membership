@@ -215,10 +215,17 @@ proposed.
   script puts a disabled rule with the old and the new members in front of
   it: enable that one and delete the old rule.
 - `-HostFilter <regex>`, `-Group <name>` and `-State WARN,CRIT` narrow the
-  selection, `-Folder` sets the folder of new rules. The output can be piped
+  selection, `-Folder` sets the folder of new rules and `-Position Top|Bottom`
+  their place in it (default: top). The output can be piped
   to `Export-Csv` to keep a list. `Get-Help .\New-GroupMemberAllowRule.ps1 -Full`
   shows all parameters.
 - The user needs to see the services and the permission to edit rules.
+
+After the review, `-Enable` enables the disabled rules the script created
+(narrowed by `-HostFilter` and `-Group`, `-WhatIf` works too); it reads no
+services and creates nothing. For a rule that replaces an enabled one it
+names the old rule, which can then be deleted. Activate the changes
+afterwards.
 
 ## Metrics
 

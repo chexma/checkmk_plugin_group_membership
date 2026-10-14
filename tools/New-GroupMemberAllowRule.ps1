@@ -14,13 +14,17 @@ Members reported as "unwanted member" are never proposed.
 Checkmk uses only the first matching rule that has "Additionally allowed members".
 The script therefore keeps one rule per host and group:
 
-  * no rule yet:              a new disabled rule is created
+  * no rule yet:              a new disabled rule is created, at the top of its folder
+                              (see -Position)
   * a disabled rule exists:   the new members are added to it
   * an enabled rule exists:   it is not touched. A disabled rule with the old and the
                               new members is created in front of it. Enable it after
                               the review and delete the old one.
 
 Nothing is activated. Use -WhatIf to see what would be done.
+
+With -Enable the script reads no services: it enables the disabled rules it created
+earlier (all of them, or those of -HostFilter and -Group). Review them first.
 
 .PARAMETER Server
 Name of the Checkmk server, with a port if needed (monitoring.example.com:8443).
@@ -52,6 +56,15 @@ Service states to read: WARN (default) and/or CRIT.
 Folder for new rules, e.g. "/" (default, main folder) or "/windows/servers". A rule
 that replaces an enabled one is created in the folder of that rule.
 
+.PARAMETER Position
+Where a new rule goes in its folder: Top (default) or Bottom. A rule that replaces an
+enabled one is always created directly in front of it.
+
+.PARAMETER Enable
+Enable the disabled rules created by this script instead of proposing new ones. Rules
+that replace an enabled rule report the old rule, which can then be deleted. The
+changes still have to be activated.
+
 .PARAMETER SkipCertificateCheck
 Do not validate the TLS certificate of the server.
 
@@ -65,6 +78,11 @@ Shows the rules that would be created.
     Export-Csv proposed.csv -NoTypeInformation -Encoding UTF8
 
 Creates the disabled rules and keeps a list of the proposed members.
+
+.EXAMPLE
+.\New-GroupMemberAllowRule.ps1 -Server monitoring.example.com -Site prod -User automation -Enable
+
+Enables all disabled rules created by this script, after they were reviewed.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -77,6 +95,8 @@ param(
     [string]$Group,
     [ValidateSet('WARN', 'CRIT')][string[]]$State = @('WARN'),
     [string]$Folder = '/',
+    [ValidateSet('Top', 'Bottom')][string]$Position = 'Top',
+    [switch]$Enable,
     [switch]$SkipCertificateCheck
 )
 
@@ -314,6 +334,82 @@ function Get-ConditionList {
     }
 }
 
+function Get-RulesetRule {
+    $rules = Invoke-Checkmk -Method Get -Path (
+        '/domain-types/rule/collections/all?ruleset_name=' + [uri]::EscapeDataString($Ruleset))
+    @($rules.Data.value)
+}
+
+# ---------------------------------------------------------------------------
+# -Enable: enable the rules created earlier
+# ---------------------------------------------------------------------------
+
+if ($Enable) {
+    $groupPattern = $null
+    if ($Group) {
+        $groupPattern = (ConvertTo-RegexLiteral $Group) + '$'
+    }
+    foreach ($rule in (Get-RulesetRule)) {
+        $properties = $rule.extensions.properties
+        $comment = ''
+        if ($properties.PSObject.Properties['comment']) {
+            $comment = [string]$properties.comment
+        }
+        if (-not $properties.disabled -or -not $comment.Contains($ScriptName)) {
+            continue
+        }
+        $hosts = @(Get-ConditionList $rule.extensions.conditions 'host_name')
+        $items = @(Get-ConditionList $rule.extensions.conditions 'service_description')
+        if ($hosts.Count -ne 1 -or $items.Count -ne 1) {
+            continue
+        }
+        if ($HostFilter -and $hosts[0] -notmatch $HostFilter) {
+            continue
+        }
+        if ($groupPattern -and $items[0] -ne $groupPattern) {
+            continue
+        }
+
+        $groupName = $items[0]
+        if ($groupName.EndsWith('$')) {
+            $groupName = $groupName.Substring(0, $groupName.Length - 1)
+        }
+        $groupName = [regex]::Unescape($groupName)
+        $target = '{0} / {1}' -f $hosts[0], $groupName
+        $parsed = Get-AllowedAdditional $rule.extensions.value_raw
+        $members = ''
+        if ($parsed) {
+            $members = (@($parsed.Items) | ForEach-Object { [regex]::Unescape($_) }) -join '; '
+        }
+
+        $action = 'enabled'
+        $replaced = [regex]::Match($comment, 'Replaces rule (\S+):')
+        if ($replaced.Success) {
+            $action = "enabled, old rule $($replaced.Groups[1].Value) can be deleted"
+        }
+        if ($PSCmdlet.ShouldProcess($target, "Enable rule $($rule.id)")) {
+            $current = Invoke-Checkmk -Method Get -Path "/objects/rule/$($rule.id)"
+            $newProperties = @{}
+            foreach ($property in $current.Data.extensions.properties.PSObject.Properties) {
+                $newProperties[$property.Name] = $property.Value
+            }
+            $newProperties['disabled'] = $false
+            [void](Invoke-Checkmk -Method Put -Path "/objects/rule/$($rule.id)" -IfMatch $current.ETag -Body @{
+                    properties = $newProperties
+                    value_raw  = $current.Data.extensions.value_raw
+                    conditions = $current.Data.extensions.conditions
+                })
+        }
+        else {
+            $action = 'would be ' + $action
+        }
+        [pscustomobject]@{
+            Host = $hosts[0]; Group = $groupName; Members = $members; Action = $action; RuleId = $rule.id
+        }
+    }
+    return
+}
+
 # ---------------------------------------------------------------------------
 # 1. Services
 # ---------------------------------------------------------------------------
@@ -362,9 +458,7 @@ $proposals = @(foreach ($service in @($services.Data.value)) {
 # 2. Existing rules
 # ---------------------------------------------------------------------------
 
-$rules = Invoke-Checkmk -Method Get -Path (
-    '/domain-types/rule/collections/all?ruleset_name=' + [uri]::EscapeDataString($Ruleset))
-$existingRules = @($rules.Data.value)
+$existingRules = @(Get-RulesetRule)
 
 function Find-OwnRule {
     # The rules for exactly this host and this group, in the order of evaluation.
@@ -489,6 +583,13 @@ foreach ($proposal in ($proposals | Sort-Object Host, Group)) {
                     [void](Invoke-Checkmk -Method Post -Path "/objects/rule/$ruleId/actions/move/invoke" -Body @{
                             position = 'before_specific_rule'
                             rule_id  = $enabledRule.id
+                        })
+                }
+                elseif ($Position -eq 'Top') {
+                    # The API appends new rules at the end of the folder.
+                    [void](Invoke-Checkmk -Method Post -Path "/objects/rule/$ruleId/actions/move/invoke" -Body @{
+                            position = 'top_of_folder'
+                            folder   = $ruleFolder
                         })
                 }
             }
